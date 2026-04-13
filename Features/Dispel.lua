@@ -416,24 +416,63 @@ local function CreateDispelOverlay(frame)
     -- Pulse animation
     overlay.pulseAnim = overlay:CreateAnimationGroup()
     overlay.pulseAnim:SetLooping("REPEAT")
-    
+
     local fadeOut = overlay.pulseAnim:CreateAnimation("Alpha")
     fadeOut:SetFromAlpha(1)
     fadeOut:SetToAlpha(0.3)
     fadeOut:SetDuration(0.5)
     fadeOut:SetOrder(1)
     fadeOut:SetSmoothing("IN_OUT")
-    
+
     local fadeIn = overlay.pulseAnim:CreateAnimation("Alpha")
     fadeIn:SetFromAlpha(0.3)
     fadeIn:SetToAlpha(1)
     fadeIn:SetDuration(0.5)
     fadeIn:SetOrder(2)
     fadeIn:SetSmoothing("IN_OUT")
-    
+
+    -- ============================================================
+    -- PIXEL GLOW FRAME
+    -- Parented to the unit frame (not the overlay) so its pulse
+    -- animation is independent of the overlay's own pulse anim.
+    -- Uses the same GLOW style as the Highlights/AuraDesigner system.
+    -- ============================================================
+    local glowFrame = CreateFrame("Frame", nil, frame)
+    glowFrame:SetAllPoints(frame)
+    glowFrame:SetFrameLevel(frame:GetFrameLevel() + 5)  -- Just below overlay (+6)
+    glowFrame:Hide()
+
+    -- Dummy edge textures required by ApplyHighlightStyle (hidden by GLOW branch)
+    glowFrame.topLine    = glowFrame:CreateTexture(nil, "OVERLAY")
+    glowFrame.bottomLine = glowFrame:CreateTexture(nil, "OVERLAY")
+    glowFrame.leftLine   = glowFrame:CreateTexture(nil, "OVERLAY")
+    glowFrame.rightLine  = glowFrame:CreateTexture(nil, "OVERLAY")
+
+    -- Independent pulse animation for the glow (speed-controlled)
+    glowFrame.pulseAnim = glowFrame:CreateAnimationGroup()
+    glowFrame.pulseAnim:SetLooping("REPEAT")
+    local glowFadeOut = glowFrame.pulseAnim:CreateAnimation("Alpha")
+    glowFadeOut:SetFromAlpha(1)
+    glowFadeOut:SetToAlpha(0.2)
+    glowFadeOut:SetDuration(0.5)
+    glowFadeOut:SetOrder(1)
+    glowFadeOut:SetSmoothing("IN_OUT")
+    local glowFadeIn = glowFrame.pulseAnim:CreateAnimation("Alpha")
+    glowFadeIn:SetFromAlpha(0.2)
+    glowFadeIn:SetToAlpha(1)
+    glowFadeIn:SetDuration(0.5)
+    glowFadeIn:SetOrder(2)
+    glowFadeIn:SetSmoothing("IN_OUT")
+    -- Store references so we can update durations when speed changes
+    glowFrame.dfGlowFadeOut = glowFadeOut
+    glowFrame.dfGlowFadeIn  = glowFadeIn
+    glowFrame.dfGlowSpeed   = 0.5  -- cached to detect changes
+
+    overlay.pixelGlowFrame = glowFrame
+
     overlay:Hide()
     frame.dfDispelOverlay = overlay
-    
+
     return overlay
 end
 
@@ -470,6 +509,9 @@ local function LayoutStateChanged(overlay, db)
         or overlay.dfL_healthOrientation       ~= db.healthOrientation
         or overlay.dfL_parentH                 ~= parentH
         or overlay.dfL_parentW                 ~= parentW
+        or overlay.dfL_pixelGlowEnabled        ~= db.dispelPixelGlowEnabled
+        or overlay.dfL_pixelGlowThickness      ~= db.dispelPixelGlowThickness
+        or overlay.dfL_pixelGlowOffset         ~= db.dispelPixelGlowOffset
 end
 
 local function CacheLayoutState(overlay, db)
@@ -489,6 +531,9 @@ local function CacheLayoutState(overlay, db)
     overlay.dfL_healthOrientation       = db.healthOrientation
     overlay.dfL_parentH                 = gradientParent and gradientParent:GetHeight() or 40
     overlay.dfL_parentW                 = gradientParent and gradientParent:GetWidth() or 80
+    overlay.dfL_pixelGlowEnabled        = db.dispelPixelGlowEnabled
+    overlay.dfL_pixelGlowThickness      = db.dispelPixelGlowThickness
+    overlay.dfL_pixelGlowOffset         = db.dispelPixelGlowOffset
 end
 
 local function ApplyOverlayLayout(overlay, db, frame)
@@ -685,6 +730,25 @@ local function ApplyOverlayLayout(overlay, db, frame)
             overlay.gradient:SetMinMaxValues(0, 1)
             overlay.gradient:SetValue(1)
             overlay.gradientTracksHealth = false
+        end
+    end
+
+    -- Pixel glow layout: position the glow layers when settings change.
+    -- Color is applied cheaply in ShowOverlayWithRGB via UpdateHighlightStyleColor.
+    if overlay.pixelGlowFrame then
+        if db.dispelPixelGlowEnabled then
+            local glowThickness = db.dispelPixelGlowThickness or 2
+            local glowOffset    = db.dispelPixelGlowOffset or 0
+            -- Use white as a placeholder colour; ShowOverlayWithRGB applies
+            -- the real dispel colour immediately after via UpdateHighlightStyleColor.
+            DF.ApplyHighlightStyle(overlay.pixelGlowFrame, "GLOW", glowThickness, glowOffset, 1, 1, 1, 1)
+        else
+            -- Hide glow layers if present
+            if overlay.pixelGlowFrame.glowLayers then
+                for _, layer in ipairs(overlay.pixelGlowFrame.glowLayers) do
+                    layer:Hide()
+                end
+            end
         end
     end
 
@@ -1322,9 +1386,45 @@ local function ShowOverlayWithRGB(overlay, r, g, b, db, dispelType, oorAlphaMult
         end
         overlay:SetAlpha(1)
     end
-    
+
+    -- Pixel glow: cheap per-call path (layout already handled by ApplyOverlayLayout)
+    if db.dispelPixelGlowEnabled and overlay.pixelGlowFrame then
+        local glowAlpha = (db.dispelPixelGlowAlpha or 0.8) * oorAlphaMultiplier
+        -- UpdateHighlightStyleColor only sets border colour on existing layers — no repositioning
+        DF.UpdateHighlightStyleColor(overlay.pixelGlowFrame, "GLOW", r, g, b, glowAlpha)
+        overlay.pixelGlowFrame:Show()
+
+        -- Manage independent pulse animation; only stop/restart when speed changes
+        local glowSpeed = db.dispelPixelGlowSpeed or 0.5
+        if glowSpeed > 0 and overlay.pixelGlowFrame.pulseAnim then
+            if overlay.pixelGlowFrame.dfGlowSpeed ~= glowSpeed then
+                -- Speed changed — update animation durations
+                local wasPlaying = overlay.pixelGlowFrame.pulseAnim:IsPlaying()
+                if wasPlaying then overlay.pixelGlowFrame.pulseAnim:Stop() end
+                overlay.pixelGlowFrame.dfGlowFadeOut:SetDuration(glowSpeed)
+                overlay.pixelGlowFrame.dfGlowFadeIn:SetDuration(glowSpeed)
+                overlay.pixelGlowFrame.dfGlowSpeed = glowSpeed
+                if wasPlaying then overlay.pixelGlowFrame.pulseAnim:Play() end
+            end
+            if not overlay.pixelGlowFrame.pulseAnim:IsPlaying() then
+                overlay.pixelGlowFrame.pulseAnim:Play()
+            end
+        elseif overlay.pixelGlowFrame.pulseAnim then
+            if overlay.pixelGlowFrame.pulseAnim:IsPlaying() then
+                overlay.pixelGlowFrame.pulseAnim:Stop()
+            end
+            overlay.pixelGlowFrame:SetAlpha(1)
+        end
+    elseif overlay.pixelGlowFrame then
+        if overlay.pixelGlowFrame.pulseAnim and overlay.pixelGlowFrame.pulseAnim:IsPlaying() then
+            overlay.pixelGlowFrame.pulseAnim:Stop()
+        end
+        overlay.pixelGlowFrame:SetAlpha(1)
+        overlay.pixelGlowFrame:Hide()
+    end
+
     overlay:Show()
-    
+
     -- Update gradient health value if tracking current health (test mode)
     if overlay.gradientTracksHealth and frame then
         -- For test mode, use the testData's health percent
@@ -1379,6 +1479,15 @@ local function HideOverlay(overlay)
         end
     end
     
+    -- Hide pixel glow and stop its animation
+    if overlay.pixelGlowFrame then
+        if overlay.pixelGlowFrame.pulseAnim and overlay.pixelGlowFrame.pulseAnim:IsPlaying() then
+            overlay.pixelGlowFrame.pulseAnim:Stop()
+        end
+        overlay.pixelGlowFrame:SetAlpha(1)
+        overlay.pixelGlowFrame:Hide()
+    end
+
     -- Hide the overlay frame itself
     overlay:Hide()
 end

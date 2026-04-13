@@ -833,6 +833,11 @@ DF.ExportCategories = {
         "dispelOnlyPlayerTypes",
         "dispelAnimate",
         "dispelAnimateSpeed",
+        "dispelPixelGlowEnabled",
+        "dispelPixelGlowThickness",
+        "dispelPixelGlowOffset",
+        "dispelPixelGlowSpeed",
+        "dispelPixelGlowAlpha",
         "dispellableHighlight",
         
         -- Missing Buff Icon

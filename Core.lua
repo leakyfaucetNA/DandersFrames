@@ -1169,8 +1169,18 @@ function DF:LightweightUpdateDispelOverlay()
                 icon:SetAlpha(iconAlpha)
             end
         end
+
+        -- Update pixel glow (full reapply since slider drag may have changed thickness/offset)
+        if overlay.pixelGlowFrame then
+            if db.dispelPixelGlowEnabled and overlay.pixelGlowFrame:IsShown() then
+                local glowThickness = db.dispelPixelGlowThickness or 2
+                local glowOffset    = db.dispelPixelGlowOffset or 0
+                local glowAlpha     = (db.dispelPixelGlowAlpha or 0.8) * oorMultiplier
+                DF.ApplyHighlightStyle(overlay.pixelGlowFrame, "GLOW", glowThickness, glowOffset, r, g, b, glowAlpha)
+            end
+        end
     end
-    
+
     IterateFramesInMode(mode, UpdateDispel)
 end
 
@@ -2387,8 +2397,14 @@ function DF:LightweightUpdateDispelColors()
             local tex = overlay.gradient:GetStatusBarTexture()
             tex:SetVertexColor(r * gradientIntensity, g * gradientIntensity, b * gradientIntensity, gradientAlpha)
         end
+
+        -- Update pixel glow colour
+        if overlay.pixelGlowFrame and overlay.pixelGlowFrame:IsShown() and db.dispelPixelGlowEnabled then
+            local glowAlpha = db.dispelPixelGlowAlpha or 0.8
+            DF.UpdateHighlightStyleColor(overlay.pixelGlowFrame, "GLOW", r, g, b, glowAlpha)
+        end
     end
-    
+
     IterateFramesInMode(mode, UpdateDispelColor)
 end
 

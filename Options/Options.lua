@@ -6864,6 +6864,34 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         colorsGroup.hideOn = HideDispelOptions
         Add(colorsGroup, nil, 2)
         
+        -- ===== PIXEL GLOW GROUP (Column 1) =====
+        local pixelGlowGroup = GUI:CreateSettingsGroup(self.child, 280)
+        pixelGlowGroup:AddWidget(GUI:CreateHeader(self.child, L["Pixel Glow"]), 40)
+        local showPixelGlow = pixelGlowGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Show Pixel Glow"], db, "dispelPixelGlowEnabled", function()
+            self:RefreshStates()
+            if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
+        end), 30)
+        showPixelGlow.hideOn = HideDispelOptions
+        local HideGlowOptions = function(d) return not d.dispelOverlayEnabled or not d.dispelPixelGlowEnabled end
+        local glowThickness = pixelGlowGroup:AddWidget(GUI:CreateSlider(self.child, L["Thickness"], 1, 8, 1, db, "dispelPixelGlowThickness", function()
+            if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
+        end, function() DF:LightweightUpdateDispelOverlay() end, true), 55)
+        glowThickness.hideOn = HideGlowOptions
+        local glowOffset = pixelGlowGroup:AddWidget(GUI:CreateSlider(self.child, L["Glow Offset"], -4, 8, 1, db, "dispelPixelGlowOffset", function()
+            if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
+        end, function() DF:LightweightUpdateDispelOverlay() end, true), 55)
+        glowOffset.hideOn = HideGlowOptions
+        local glowSpeed = pixelGlowGroup:AddWidget(GUI:CreateSlider(self.child, L["Glow Speed"], 0.1, 2.0, 0.1, db, "dispelPixelGlowSpeed", function()
+            if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
+        end, nil, true), 55)
+        glowSpeed.hideOn = HideGlowOptions
+        local glowAlpha = pixelGlowGroup:AddWidget(GUI:CreateSlider(self.child, L["Glow Opacity"], 0.1, 1.0, 0.1, db, "dispelPixelGlowAlpha", function()
+            InvalidateCurves()
+        end, function() DF:LightweightUpdateDispelColors() end, true), 55)
+        glowAlpha.hideOn = HideGlowOptions
+        pixelGlowGroup.hideOn = HideDispelOptions
+        Add(pixelGlowGroup, nil, 1)
+
         -- ===== GRADIENT GROUP (Column 1) =====
         local gradientGroup = GUI:CreateSettingsGroup(self.child, 280)
         gradientGroup:AddWidget(GUI:CreateHeader(self.child, L["Gradient"]), 40)
