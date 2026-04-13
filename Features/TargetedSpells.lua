@@ -3696,9 +3696,8 @@ local TargetedList_StartFadeTicker
 
 -- Single source of truth for "is this feature allowed to run at all".
 -- Every public entry point calls this; any time it returns false, the
--- caller must be a no-op. This is the stable-release kill switch.
+-- caller must be a no-op.
 local function TargetedList_IsGateOpen()
-    if DF.RELEASE_CHANNEL == "release" then return false end
     return true
 end
 
@@ -3901,26 +3900,26 @@ local function TargetedList_DelayedPickup(casterUnit, isChannel, eventSpellId)
     local spellId = eventSpellId
     if spellId == nil then return end
 
-    -- Pull notInterruptible only — everything else from these APIs is
-    -- secret. notInterruptible itself is also secret, but only ever
-    -- fed to SetVertexColorFromBoolean (a secret-safe sink) at render.
+    -- Re-detect cast vs channel at pickup time. The 0.2s delay means
+    -- a cast may have transitioned to a channel since the START event.
+    -- Check casting first, fall back to channel.
     local notInterruptible
-    if isChannel then
-        -- UnitChannelInfo positional 7: notInterruptible
+    if TL_UnitCastingInfo(casterUnit) ~= nil then
+        isChannel = false
+        notInterruptible = select(8, TL_UnitCastingInfo(casterUnit))
+    elseif TL_UnitChannelInfo(casterUnit) ~= nil then
+        isChannel = true
         notInterruptible = select(7, TL_UnitChannelInfo(casterUnit))
     else
-        -- UnitCastingInfo positional 8: notInterruptible
-        notInterruptible = select(8, TL_UnitCastingInfo(casterUnit))
+        -- Cast vanished during the 0.2s delay (CC, mob death, etc.)
+        return
     end
 
-    -- Duration: TimerDuration object (NOT a number), opaque, fed to
-    -- StatusBar:SetTimerDuration at render. Never arithmetic.
-    local duration
-    if isChannel then
-        duration = TL_UnitChannelDuration_API and TL_UnitChannelDuration_API(casterUnit)
-    else
-        duration = TL_UnitCastingDuration_API and TL_UnitCastingDuration_API(casterUnit)
-    end
+    -- Duration: try both APIs regardless of isChannel flag. A cast that
+    -- transitions to a channel may report via either API during the
+    -- brief overlap.
+    local duration = (TL_UnitCastingDuration_API and TL_UnitCastingDuration_API(casterUnit))
+        or (TL_UnitChannelDuration_API and TL_UnitChannelDuration_API(casterUnit))
 
     activeTargetedListCasts[casterUnit] = {
         spellId         = spellId,           -- secret; only feed to C_Spell.* + sinks
@@ -4007,6 +4006,30 @@ local function TargetedList_ProcessCastStart(casterUnit, event, ...)
         isChannel = false
     end
 
+    -- Cast-to-channel transition: if CHANNEL_START fires and we already
+    -- have a cast record for this unit, update the record immediately
+    -- instead of waiting 0.2s. The channel duration is available now.
+    -- We must re-apply bar content directly because the render loop
+    -- only calls ApplyBarContent for newly assigned bars, not existing ones.
+    -- Uses DF._TargetedListTransitionToChannel (defined later, after
+    -- casterToBar and ApplyBarContent are in scope).
+    if isChannel then
+        local existing = activeTargetedListCasts[casterUnit]
+        if existing and not existing.fadingStartedAt and not existing.isChannel then
+            local channelDuration = TL_UnitChannelDuration_API
+                and TL_UnitChannelDuration_API(casterUnit)
+            if channelDuration then
+                existing.duration = channelDuration
+                existing.isChannel = true
+                existing.uninterruptible = select(7, TL_UnitChannelInfo(casterUnit))
+                if DF._TargetedListTransitionToChannel then
+                    DF._TargetedListTransitionToChannel(casterUnit, existing)
+                end
+                return
+            end
+        end
+    end
+
     -- Event payload (after `unit` consumed by OnEvent): (castGuid, spellId).
     -- We only need spellId — castGuid was used for cast-ID matching, which
     -- we've removed because secret-string equality compare errors.
@@ -4027,13 +4050,17 @@ local function TargetedList_OnCastStop(casterUnit, event, ...)
     if not active then return end
 
     -- Gotcha #3: some channel spells (pulse DoTs, ground-effect zones)
-    -- emit SUCCEEDED once per tick while still channeling. Ignore.
-    -- We pull only the spellId via positional discard to avoid
-    -- truth-testing the (possibly secret) first return value.
+    -- emit SUCCEEDED once per tick while still channeling. Also covers
+    -- cast-to-channel transitions — the channel data may not be ready
+    -- yet at SUCCEEDED time, so we just skip the fade and let
+    -- CHANNEL_START handle the transition.
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
-        local _, _, _, _, _, _, _, channelSpellId = TL_UnitChannelInfo(casterUnit)
-        if channelSpellId ~= nil then return end
+        if TL_UnitChannelInfo(casterUnit) ~= nil then return end
     end
+
+    -- INTERRUPTED fires before STOP. If the record is already fading
+    -- as interrupted, don't let STOP overwrite with the short fade.
+    if active.wasInterrupted and active.fadingStartedAt then return end
 
     -- Gotcha #2 (cast-ID matching) has been REMOVED — see gotcha #0 in
     -- the findings doc. Equality compare on a secret-tainted castID
@@ -4361,23 +4388,19 @@ local function TargetedList_BuildBar(parent)
     durationText:SetWordWrap(false)
     bar.duration = durationText
 
-    -- OnUpdate: refresh duration countdown text every ~100ms
+    -- OnUpdate: refresh duration countdown text every ~100ms.
+    -- Read duration from the StatusBar via GetTimerDuration() each tick,
+    -- call GetRemainingDuration(), feed
+    -- directly to SetFormattedText (a secret-safe sink). Use explicit
+    -- == nil checks (not truthiness) to avoid secret-taint errors.
     bar._durationElapsed = 0
     bar:SetScript("OnUpdate", function(self, elapsed)
         self._durationElapsed = self._durationElapsed + elapsed
         if self._durationElapsed < 0.1 then return end
         self._durationElapsed = self._durationElapsed - 0.1
         if not self.duration:IsShown() then return end
-        if self._durationObj then
-            -- Live bar: read remaining time from the opaque duration object
-            local remaining = self._durationObj:GetRemainingDuration()
-            if remaining and remaining > 0 then
-                self.duration:SetFormattedText("%.1f", remaining)
-            else
-                self.duration:SetText("")
-            end
-        elseif self._testDuration then
-            -- Test bar: compute from startTime + totalDuration
+        if self._testDuration then
+            -- Test bar: compute from startTime + totalDuration (clean values)
             local td = self._testDuration
             local remaining = td.totalDuration - (TL_GetTime() - td.startTime)
             if remaining > 0 then
@@ -4385,6 +4408,11 @@ local function TargetedList_BuildBar(parent)
             else
                 self.duration:SetText("")
             end
+        else
+            -- Live bar: read duration fresh from the StatusBar each tick
+            local durationObj = self.progress:GetTimerDuration()
+            if durationObj == nil then return end
+            self.duration:SetFormattedText("%.1f", durationObj:GetRemainingDuration())
         end
     end)
 
@@ -4606,7 +4634,6 @@ local function TargetedList_ResetBar(pool, bar)
     if bar.duration then
         bar.duration:SetText("")
     end
-    bar._durationObj = nil
     bar._testDuration = nil
     bar.icon:SetTexture(nil)
     bar._lastTexturePath = nil
@@ -4736,11 +4763,9 @@ local function TargetedList_ApplyBarContent(bar, activeRec)
     if activeRec.testFrozenFill then
         bar.progress:SetMinMaxValues(0, 1)
         bar.progress:SetValue(activeRec.testFrozenFill)
-        bar._durationObj = nil
         bar._testDuration = nil
     elseif activeRec.fadingStartedAt then
         -- Don't update progress. The fill stays where it was.
-        bar._durationObj = nil
         bar._testDuration = nil
     elseif isTest and activeRec.testCastDuration then
         local cutoff = activeRec.testInterruptAt or activeRec.testCastDuration
@@ -4749,16 +4774,13 @@ local function TargetedList_ApplyBarContent(bar, activeRec)
         bar.progress:SetMinMaxValues(0, 1)
         bar.progress:SetValue(pct)
         -- Store test timing for OnUpdate duration text
-        bar._durationObj = nil
         bar._testDuration = { startTime = activeRec.startTime, totalDuration = cutoff }
     elseif activeRec.duration and bar.progress.SetTimerDuration then
-        local direction = activeRec.isChannel
+        local direction = (activeRec.isChannel)
             and Enum.StatusBarTimerDirection.RemainingTime
             or Enum.StatusBarTimerDirection.ElapsedTime
         bar.progress:SetTimerDuration(activeRec.duration,
             Enum.StatusBarInterpolation.Immediate, direction)
-        -- Store duration object for OnUpdate countdown text
-        bar._durationObj = activeRec.duration
         bar._testDuration = nil
     end
 
@@ -5269,6 +5291,16 @@ end
 -- Re-export so the cast lifecycle can trigger a render after
 -- modifying activeTargetedListCasts.
 DF._TargetedListRender = TargetedList_Render
+
+-- Cast-to-channel transition: re-apply bar content so SetTimerDuration
+-- picks up the new channel duration. Called from ProcessCastStart which
+-- runs before casterToBar and ApplyBarContent are defined.
+DF._TargetedListTransitionToChannel = function(casterUnit, rec)
+    local bar = casterToBar[casterUnit]
+    if bar then
+        TargetedList_ApplyBarContent(bar, rec)
+    end
+end
 
 -- ------------------------------------------------------------
 -- Mover

@@ -1747,7 +1747,7 @@ DF.PartyDefaults = {
     targetedSpellX = 0,
     targetedSpellY = -28,
 
-    -- Targeted List (alpha/beta only — gated by DF.RELEASE_CHANNEL ~= "release")
+    -- Targeted List (party-mode only)
     -- Stacked cast-bar display showing enemy casts targeting party members.
     -- User-facing name ("Targeted List") is intentionally decoupled from the
     -- internal `targetedList*` db prefix so the feature can be renamed later
@@ -1776,7 +1776,7 @@ DF.PartyDefaults = {
     targetedListInOpenWorld = true,
     targetedListInRaids = false,
     targetedListInterruptedFlashDuration = 2.0,
-    targetedListInterruptibleColor = {r = 1, g = 0.2, b = 0.2, a = 1},
+    targetedListInterruptibleColor = {r = 1, g = 0.494, b = 0.137, a = 1},
     targetedListMaxBars = 6,
     targetedListShowArrowPrefix = true,
     targetedListShowArrowSuffix = false,
@@ -1791,9 +1791,9 @@ DF.PartyDefaults = {
     targetedListStylePreset = "DEFAULT",
     targetedListTargetNameClassColor = true,
     targetedListTexture = "Interface\\Buttons\\WHITE8x8",
-    targetedListUninterruptibleColor = {r = 0.5, g = 0.5, b = 0.5, a = 1},
+    targetedListUninterruptibleColor = {r = 0.8, g = 0.302, b = 0.302, a = 1},
     targetedListSelfTargetColorEnabled = true,
-    targetedListSelfTargetColor = {r = 1, g = 0.85, b = 0.1, a = 0.2},
+    targetedListSelfTargetColor = {r = 0.02, g = 0.776, b = 0.4, a = 0.2},
     targetedListWidth = 240,
     targetedListX = 0,
     targetedListY = -10,

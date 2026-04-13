@@ -3693,7 +3693,7 @@ DF._MainEventDispatcher = function(self, event, arg1)
         end
 
         -- Force auraSourceMode to DIRECT for all existing profiles (v4.2.x)
-        -- One-time migration: users who prefer BLIZZARD can switch back manually
+        -- One-time migration: sets flag so the popup only shows once.
         if DandersFramesDB_v2 and DandersFramesDB_v2.profiles then
             for profileName, profile in pairs(DandersFramesDB_v2.profiles) do
                 for _, mode in ipairs({"party", "raid"}) do
@@ -3703,6 +3703,27 @@ DF._MainEventDispatcher = function(self, event, arg1)
                     end
                 end
             end
+        end
+
+        -- Unconditional safety net: force DIRECT on every login for all
+        -- profiles. Catches edge cases where BLIZZARD mode slips back in
+        -- via profile import, saved variable edits, or unknown code paths.
+        -- Runs after the flagged migration above so the popup still fires
+        -- on first encounter.
+        if DandersFramesDB_v2 and DandersFramesDB_v2.profiles then
+            for profileName, profile in pairs(DandersFramesDB_v2.profiles) do
+                for _, mode in ipairs({"party", "raid"}) do
+                    if profile[mode] and profile[mode].auraSourceMode ~= "DIRECT" then
+                        profile[mode].auraSourceMode = "DIRECT"
+                    end
+                end
+            end
+        end
+
+        -- Reset seenTabs so "New" badges show for 4.3.0 features (one-time)
+        if DandersFramesDB_v2 and not DandersFramesDB_v2._seenTabsReset_430 then
+            DandersFramesDB_v2.seenTabs = nil
+            DandersFramesDB_v2._seenTabsReset_430 = true
         end
 
         -- Migrate dispellable filter from two booleans to single mode string (v4.3.x)

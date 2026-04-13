@@ -423,8 +423,8 @@ DF.ExportCategories = {
         "debuffFilterMode",
         "debuffShowAll",
 
-        -- Aura Source Mode
-        "auraSourceMode",
+        -- Aura Source Mode (auraSourceMode intentionally excluded —
+        -- forced to DIRECT, should not be overwritten by imports)
         "directBuffShowAll",
         "directBuffOnlyMine",
         "directBuffFilterRaid",

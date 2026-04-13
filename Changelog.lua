@@ -1,19 +1,15 @@
 local addonName, DF = ...
-DF.BUILD_DATE = "2026-04-12T22:07:43Z"
+DF.BUILD_DATE = "2026-04-13T11:37:34Z"
 DF.RELEASE_CHANNEL = "alpha"
 DF.CHANGELOG_TEXT = [===[
 # DandersFrames Changelog
 
 ## [4.3.0] - 2026-04-10
 
-### Bug Fixes
-
-* (Tooltips) Add tooltip refresh ticker so third-party tooltip addons (e.g. RaiderIO) can respond to modifier key state changes while hovering unit frames
-* (Tooltips) Add clean unit token resolver for tooltip SetUnit calls to work around Midnight 12.0 taint propagation from secure frame attributes
-
 ### Improvements
 
 * (Auras) Force-disable Blizzard aura data source ahead of its removal in 12.0.5 — all users now use Direct API mode immediately
+* (Auras) Prevent Blizzard aura source from persisting via profile imports — removed from export categories, forced to Direct on import and every login
 * (Aura Filters) Add info banner clarifying that Aura Filters only affect Buff Bar and Debuff Bar, with clickable links to related pages
 * (Aura Filters) Remove outdated Defensives and Dispel Detection info section
 * (Aura Filters) Dispellable filter now uses a toggle switch (Dispellable By Me / All Dispellable) instead of two separate checkboxes
@@ -22,32 +18,17 @@ DF.CHANGELOG_TEXT = [===[
 * (Aura Blacklist) Add warning icon next to Symbiotic Relationship noting caster-only blacklist limitation
 * (Aura Blacklist) Increased warning and notice banner icon sizes for better visibility
 * (Boss Debuffs) Add info banner noting Boss Debuffs cannot trigger Dispel Overlays
-* (Targeted List) Rename "Hide Own Casts" to "Hide Casts Targeting You" for clarity
-* (Targeted List) Rename "Width" to "Max Text Width" on spell name, target name, and interrupt text sliders
-* (Targeted List) Font now uses DF:SafeSetFont for proper SHADOW outline and multi-alphabet support
-* (Targeted List) Duration text now uses custom FontString instead of Blizzard's native Cooldown countdown, allowing custom font, size, and outline to apply
-* (Targeted List) Per-element font sizes (0 = use global) now fall back correctly instead of treating 0 as a literal size
-* (Targeted List) Updated defaults: font matches global (DF Roboto SemiBold / SHADOW), self-target color on, hide out-of-combat on, show untargeted on, flat texture, and other tuned values
 
 ### New Features
 
 * **Toggle Switch GUI element** — new reusable UI control for mutually exclusive A/B settings, with themed visuals and label highlighting
-* **Targeted List** — a new stacked cast-bar display that shows enemy casts targeting party members. Replaces the group-frame Targeted Spells icons that were broken by Blizzard's recent UnitIsUnit hotfix. Party-mode only
-* (Targeted List) Draggable mover integrated with the existing Unlock Frames flow
-* (Targeted List) Position panel now switches context based on which mover you click: party, raid, Personal Targeted Spells, or Targeted List
-* (Targeted List) Four bar style presets (Default / Compact / Detailed / Minimal) plus independent per-text-element anchor and offset for fine-grained layout control
-* (Targeted List) Test mode support with demo bars driven from the Test Mode panel
-* (Targeted List) Fade-out animation on cast completion and a yellow interrupted-flash tint on interrupts, both with configurable durations
-* (Targeted List) Full appearance controls: icon, border, background alpha, textures, font, per-text-element show/hide, class-colored target names, arrow prefix, sort order, content-type filter, important-spells-only filter, hide-own-casts filter
-* (Targeted List) Arrow suffix setting — append an arrow marker after the target name, complementing the existing arrow prefix
-* (Targeted List) Self-target color overlay — highlight bars with a configurable color when the enemy is casting at you (enabled by default)
-* (Targeted List) Hide out-of-combat casts — filter out casts from idle mobs not yet in combat (enabled by default)
-* (Targeted List) Duration font size slider added to the Duration section in Text Position settings
+* **"New" tab badges** — gold "New" text appears on tabs and their parent category for new features, auto-hides once the tab is opened
+* **Targeted List** — a new stacked cast-bar display that shows enemy casts targeting party members. Replaces the group-frame Targeted Spells icons that were broken by Blizzard's recent UnitIsUnit hotfix. Party-mode only, with draggable mover, test mode, four style presets, and full appearance controls including font, colors, icon, border, textures, arrow prefix/suffix, self-target color overlay, hide out-of-combat filter, cast-to-channel transitions, interrupted flash, and per-text-element positioning
 
 ### Bug Fixes
 
-* (Targeted List) Fix global font not applying on first open — bars now receive font settings immediately on acquisition from the pool
-
+* (Tooltips) Add tooltip refresh ticker so third-party tooltip addons (e.g. RaiderIO) can respond to modifier key state changes while hovering unit frames
+* (Tooltips) Add clean unit token resolver for tooltip SetUnit calls to work around Midnight 12.0 taint propagation from secure frame attributes
 * (Absorb Bars) Fix absorb bars showing as floating bars when Attached or Attached+Overflow display mode is selected
 * (Aura Designer) Fix indicators sometimes showing wrong settings (wrong font size, icon size, bar colors) — Configure now runs mid-combat so indicators always get correct static settings immediately
 * (Aura Designer) Fix duration text using default Blizzard font/size when the cooldown FontString hasn't been created yet at configure time

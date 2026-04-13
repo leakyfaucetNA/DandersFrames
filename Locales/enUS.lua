@@ -1064,6 +1064,7 @@ L["Removes all Aura Designer overrides from this auto layout, restoring it to ma
 L["Removes your player frame from the DandersFrames party display."] = true
 L["Replace Blizzard's color picker with the DandersFrames color picker for this addon."] = true
 L["Reset All to Default"] = true
+L["Reset Colors to Default"] = true
 L["Reset Aura Designer to Global"] = true
 L["Reset current profile to defaults?\nThis will reset BOTH Party and Raid settings."] = true
 L["Reset Position"] = true
@@ -1248,7 +1249,7 @@ L["Target Name"] = true
 L["Target Name Class Color"] = true
 L["Target Order"] = true
 L["Targeted List"] = true
-L["Targeted List — Alpha feature, behavior may change"] = true
+L["Targeted List is a Party-only feature. Switch to Party mode to configure."] = true
 L["Targeted Spell Alpha"] = true
 L["Targeted Spell Click-Through"] = true
 L["Targeted Spells"] = true

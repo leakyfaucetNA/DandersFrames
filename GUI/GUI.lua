@@ -22,6 +22,12 @@ DF.SectionRegistry = DF.SectionRegistry or {}
 -- Track selected mode
 GUI.SelectedMode = "party"
 
+-- Registry of tabs that should show a "New" badge until opened.
+-- Add tab IDs here for new features; the badge auto-hides once viewed.
+GUI.NewTabs = {
+    ["indicators_targetedlist"] = true,
+}
+
 -- Track currently open dropdown menu (only one can be open at a time)
 local currentOpenDropdown = nil
 
@@ -7346,6 +7352,27 @@ function DF:CreateGUI()
             end
             GUI.Tabs[name].Text:SetTextColor(nc.r, nc.g, nc.b)
             GUI.Tabs[name].isActive = true
+            -- Mark "New" badge as seen
+            if GUI.Tabs[name].newBadge and GUI.Tabs[name].newBadge:IsShown() then
+                GUI.Tabs[name].newBadge:Hide()
+                if DandersFramesDB_v2 then
+                    DandersFramesDB_v2.seenTabs = DandersFramesDB_v2.seenTabs or {}
+                    DandersFramesDB_v2.seenTabs[name] = true
+                end
+                -- Hide parent category badge if no remaining children have new badges
+                local catName = GUI.Tabs[name].categoryName
+                local cat = catName and GUI.Categories[catName]
+                if cat and cat.newBadge and cat.newBadge:IsShown() then
+                    local anyNew = false
+                    for _, child in ipairs(cat.children) do
+                        if child.newBadge and child.newBadge:IsShown() then
+                            anyNew = true
+                            break
+                        end
+                    end
+                    if not anyNew then cat.newBadge:Hide() end
+                end
+            end
         end
         GUI.CurrentPageName = name
         UpdateThemeColors()
@@ -7396,7 +7423,15 @@ function DF:CreateGUI()
         cat.Text:SetPoint("LEFT", 20, 0)
         cat.Text:SetText(label)
         cat.Text:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
-        
+
+        -- "New" badge for categories — shown when any child tab has a new badge
+        local catNewBadge = cat:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        catNewBadge:SetPoint("RIGHT", cat, "RIGHT", -8, 0)
+        catNewBadge:SetText(L["New"])
+        catNewBadge:SetTextColor(1, 0.82, 0)
+        catNewBadge:Hide()
+        cat.newBadge = catNewBadge
+
         cat:SetScript("OnEnter", function(self)
             self:SetBackdropColor(C_HOVER.r, C_HOVER.g, C_HOVER.b, 0.3)
         end)
@@ -7453,7 +7488,24 @@ function DF:CreateGUI()
         btn.Text:SetPoint("LEFT", 24, 0)
         btn.Text:SetText(label)
         btn.Text:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
-        
+
+        -- "New" badge — shown for tabs in GUI.NewTabs until the user opens them
+        local newBadge = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        newBadge:SetPoint("RIGHT", btn, "RIGHT", -8, 0)
+        newBadge:SetText(L["New"])
+        newBadge:SetTextColor(1, 0.82, 0)
+        newBadge:Hide()
+        btn.newBadge = newBadge
+        if GUI.NewTabs[name]
+           and not (DandersFramesDB_v2 and DandersFramesDB_v2.seenTabs
+                    and DandersFramesDB_v2.seenTabs[name]) then
+            newBadge:Show()
+            -- Also show "New" on the parent category
+            if cat and cat.newBadge then
+                cat.newBadge:Show()
+            end
+        end
+
         btn:SetScript("OnEnter", function(self)
             if not self.isActive then
                 self:SetBackdropColor(C_HOVER.r, C_HOVER.g, C_HOVER.b, 0.5)
