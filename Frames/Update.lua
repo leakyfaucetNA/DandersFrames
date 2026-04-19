@@ -842,11 +842,27 @@ function DF:UpdateUnitFrame(frame, source)
                         frame.healthText:SetFormattedText("%s/%s", curr, max)
                     end
                 end
+            elseif format == "HEAL_ABSORB" then
+                -- UnitGetTotalHealAbsorbs returns a secret value in WoW 12.0.
+                -- Use TruncateWhenZero to hide when zero without tainting.
+                local absorb = UnitGetTotalHealAbsorbs(unit)
+                if absorb then
+                    if C_StringUtil and C_StringUtil.TruncateWhenZero then
+                        frame.healthText:SetText(C_StringUtil.TruncateWhenZero(absorb))
+                        if db.healthTextAbbreviate and AbbreviateNumbers and frame.healthText:GetText() ~= "" then
+                            frame.healthText:SetFormattedText("%s", AbbreviateNumbers(absorb))
+                        end
+                    elseif db.healthTextAbbreviate and AbbreviateNumbers then
+                        frame.healthText:SetFormattedText("%s", AbbreviateNumbers(absorb))
+                    else
+                        frame.healthText:SetFormattedText("%s", absorb)
+                    end
+                end
             end
             frame.healthText:Show()
         end
     end
-    
+
     -- ========================================
     -- POWER BAR
     -- ========================================
@@ -1114,6 +1130,21 @@ function DF:UpdateHealthFast(frame)
                         frame.healthText:SetFormattedText("%s/%s", curr, maxHp)
                     end
                 end
+            elseif fmt == "HEAL_ABSORB" then
+                -- Secret-safe: TruncateWhenZero hides the text when absorb == 0.
+                local absorb = UnitGetTotalHealAbsorbs(unit)
+                if absorb then
+                    if C_StringUtil and C_StringUtil.TruncateWhenZero then
+                        frame.healthText:SetText(C_StringUtil.TruncateWhenZero(absorb))
+                        if db.healthTextAbbreviate and AbbreviateNumbers and frame.healthText:GetText() ~= "" then
+                            frame.healthText:SetFormattedText("%s", AbbreviateNumbers(absorb))
+                        end
+                    elseif db.healthTextAbbreviate and AbbreviateNumbers then
+                        frame.healthText:SetFormattedText("%s", AbbreviateNumbers(absorb))
+                    else
+                        frame.healthText:SetFormattedText("%s", absorb)
+                    end
+                end
             end
             frame.healthText:Show()
         end
@@ -1341,6 +1372,20 @@ function DF:UpdateHealth(frame)
             local max = UnitHealthMax(unit, true)
             if curr and max then
                 frame.healthText:SetFormattedText("%s / %s", FormatValue(curr), FormatValue(max))
+            end
+        elseif format == "HEAL_ABSORB" then
+            -- Secret-safe: TruncateWhenZero + plain-string check gate the abbreviation
+            -- without ever letting Lua compare the absorb amount directly.
+            local absorb = UnitGetTotalHealAbsorbs(unit)
+            if absorb then
+                if C_StringUtil and C_StringUtil.TruncateWhenZero then
+                    frame.healthText:SetText(C_StringUtil.TruncateWhenZero(absorb))
+                    if db.healthTextAbbreviate and frame.healthText:GetText() ~= "" then
+                        frame.healthText:SetFormattedText("%s", FormatValue(absorb))
+                    end
+                else
+                    frame.healthText:SetFormattedText("%s", FormatValue(absorb))
+                end
             end
         end
     end

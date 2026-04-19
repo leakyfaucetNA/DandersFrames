@@ -3666,8 +3666,8 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         
         local formatOptions = {
             PERCENT= L["Percentage"], CURRENT= L["Current Health"], CURRENTMAX= L["Current / Max"],
-            DEFICIT= L["Health Deficit"], NONE= L["Hidden"],
-            _order = {"PERCENT", "CURRENT", "CURRENTMAX", "DEFICIT", "NONE"},
+            DEFICIT= L["Health Deficit"], HEAL_ABSORB= L["Heal Absorb"], NONE= L["Hidden"],
+            _order = {"PERCENT", "CURRENT", "CURRENTMAX", "DEFICIT", "HEAL_ABSORB", "NONE"},
         }
         formatGroup:AddWidget(GUI:CreateDropdown(self.child, L["Health Format"], formatOptions, db, "healthTextFormat", function() DF:RefreshAllVisibleFrames() end), 55)
         formatGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Abbreviate (K/M)"], db, "healthTextAbbreviate", function() DF:RefreshAllVisibleFrames() end), 30)

@@ -441,6 +441,9 @@ function DF:UpdateTestFrameHealthOnly(frame, index)
             text = FormatVal(currentHP) .. "/" .. FormatVal(maxHP)
         elseif format == "CURRENT_PERCENT" then
             text = FormatVal(currentHP) .. " " .. string.format("%.0f%%", pct)
+        elseif format == "HEAL_ABSORB" then
+            local absorb = math.floor((testData.healAbsorbPercent or 0) * maxHP)
+            text = absorb > 0 and FormatVal(absorb) or ""
         end
         frame.healthText:SetText(text)
     end
@@ -602,6 +605,13 @@ function DF:UpdateTestFrame(frame, index, applyLayout)
     elseif format == "DEFICIT" then
         if deficit > 0 then
             frame.healthText:SetText("-" .. FormatValue(deficit))
+        else
+            frame.healthText:SetText("")
+        end
+    elseif format == "HEAL_ABSORB" then
+        local absorb = math.floor((testData.healAbsorbPercent or 0) * maxHealth)
+        if absorb > 0 then
+            frame.healthText:SetText(FormatValue(absorb))
         else
             frame.healthText:SetText("")
         end
