@@ -1255,6 +1255,7 @@ function DF:SetupFrameEvents(frame, unit)
         elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
             if not DF.testMode and not DF.raidTestMode then
                 DF:UpdateHealAbsorb(self)
+                DF:UpdateHealAbsorbText(self)
             end
         elseif event == "UNIT_HEAL_PREDICTION" then
             if not DF.testMode and not DF.raidTestMode then
@@ -1965,6 +1966,7 @@ function DF:CreateUnitFrame(unit, index, isRaid)
             -- Skip in test mode - test mode handles its own heal absorb display
             if not DF.testMode and not DF.raidTestMode then
                 DF:UpdateHealAbsorb(self)
+                DF:UpdateHealAbsorbText(self)
             end
         elseif event == "UNIT_HEAL_PREDICTION" then
             -- Skip in test mode - test mode handles its own heal prediction display

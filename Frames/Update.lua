@@ -802,6 +802,9 @@ function DF:UpdateUnitFrame(frame, source)
     -- ========================================
     if frame.healthText then
         local format = db.healthTextFormat or "PERCENT"
+        -- Opt into / out of the heal-absorb text poller as the format
+        -- switches. The poller is shared across all frames using this format.
+        DF:SetHealAbsorbTextPolling(frame, format == "HEAL_ABSORB")
         if format == "NONE" then
             frame.healthText:Hide()
         else
@@ -845,11 +848,13 @@ function DF:UpdateUnitFrame(frame, source)
             elseif format == "HEAL_ABSORB" then
                 -- UnitGetTotalHealAbsorbs returns a secret value in WoW 12.0.
                 -- Use TruncateWhenZero to hide when zero without tainting.
+                -- GetText() is used as a truthy check (matches DEFICIT pattern) —
+                -- direct `~= ""` comparison on the returned string is a taint.
                 local absorb = UnitGetTotalHealAbsorbs(unit)
                 if absorb then
                     if C_StringUtil and C_StringUtil.TruncateWhenZero then
                         frame.healthText:SetText(C_StringUtil.TruncateWhenZero(absorb))
-                        if db.healthTextAbbreviate and AbbreviateNumbers and frame.healthText:GetText() ~= "" then
+                        if db.healthTextAbbreviate and AbbreviateNumbers and frame.healthText:GetText() then
                             frame.healthText:SetFormattedText("%s", AbbreviateNumbers(absorb))
                         end
                     elseif db.healthTextAbbreviate and AbbreviateNumbers then
@@ -1092,6 +1097,7 @@ function DF:UpdateHealthFast(frame)
     -- ========================================
     if frame.healthText then
         local fmt = db.healthTextFormat or "PERCENT"
+        DF:SetHealAbsorbTextPolling(frame, fmt == "HEAL_ABSORB")
         if fmt == "NONE" then
             frame.healthText:Hide()
         else
@@ -1134,11 +1140,12 @@ function DF:UpdateHealthFast(frame)
                 end
             elseif fmt == "HEAL_ABSORB" then
                 -- Secret-safe: TruncateWhenZero hides the text when absorb == 0.
+                -- GetText() must be used as a truthy check, not compared to "".
                 local absorb = UnitGetTotalHealAbsorbs(unit)
                 if absorb then
                     if C_StringUtil and C_StringUtil.TruncateWhenZero then
                         frame.healthText:SetText(C_StringUtil.TruncateWhenZero(absorb))
-                        if db.healthTextAbbreviate and AbbreviateNumbers and frame.healthText:GetText() ~= "" then
+                        if db.healthTextAbbreviate and AbbreviateNumbers and frame.healthText:GetText() then
                             frame.healthText:SetFormattedText("%s", AbbreviateNumbers(absorb))
                         end
                     elseif db.healthTextAbbreviate and AbbreviateNumbers then
@@ -1328,7 +1335,8 @@ function DF:UpdateHealth(frame)
     
     -- Update health text
     local format = db.healthTextFormat or "PERCENT"
-    
+    DF:SetHealAbsorbTextPolling(frame, format == "HEAL_ABSORB")
+
     if format == "NONE" then
         frame.healthText:SetText("")
     else
@@ -1377,13 +1385,14 @@ function DF:UpdateHealth(frame)
                 frame.healthText:SetFormattedText("%s / %s", FormatValue(curr), FormatValue(max))
             end
         elseif format == "HEAL_ABSORB" then
-            -- Secret-safe: TruncateWhenZero + plain-string check gate the abbreviation
-            -- without ever letting Lua compare the absorb amount directly.
+            -- Secret-safe: TruncateWhenZero hides when zero; GetText() is used
+            -- as a truthy check (matches DEFICIT pattern) — comparing the returned
+            -- string with ~= "" would taint because the string is secret-tagged.
             local absorb = UnitGetTotalHealAbsorbs(unit)
             if absorb then
                 if C_StringUtil and C_StringUtil.TruncateWhenZero then
                     frame.healthText:SetText(C_StringUtil.TruncateWhenZero(absorb))
-                    if db.healthTextAbbreviate and frame.healthText:GetText() ~= "" then
+                    if db.healthTextAbbreviate and frame.healthText:GetText() then
                         frame.healthText:SetFormattedText("%s", FormatValue(absorb))
                     end
                 else
@@ -1410,6 +1419,76 @@ function DF:UpdateHealth(frame)
 
     -- Apply colors
     DF:ApplyHealthColors(frame)
+end
+
+-- ============================================================
+-- Refresh only the heal-absorb health-text (no-op for other formats).
+-- Mirrors the HEAL_ABSORB branches in UpdateUnitFrame — keeps the same
+-- secret-safe TruncateWhenZero + GetText() truthy-check pattern.
+-- ============================================================
+function DF:UpdateHealAbsorbText(frame)
+    if not frame or not frame.healthText then return end
+    local db = DF:GetFrameDB(frame)
+    if not db or db.healthTextFormat ~= "HEAL_ABSORB" then return end
+    local unit = frame.unit
+    if not unit then return end
+
+    local absorb = UnitGetTotalHealAbsorbs(unit)
+    if not absorb then return end
+
+    if C_StringUtil and C_StringUtil.TruncateWhenZero then
+        frame.healthText:SetText(C_StringUtil.TruncateWhenZero(absorb))
+        if db.healthTextAbbreviate and AbbreviateNumbers and frame.healthText:GetText() then
+            frame.healthText:SetFormattedText("%s", AbbreviateNumbers(absorb))
+        end
+    elseif db.healthTextAbbreviate and AbbreviateNumbers then
+        frame.healthText:SetFormattedText("%s", AbbreviateNumbers(absorb))
+    else
+        frame.healthText:SetFormattedText("%s", absorb)
+    end
+end
+
+-- ============================================================
+-- HEAL-ABSORB TEXT POLLING
+-- UNIT_HEAL_ABSORB_AMOUNT_CHANGED doesn't fire reliably for secret-valued
+-- heal absorbs in WoW 12.0 (Blizzard suppresses events that would leak
+-- secret deltas). The bar keeps rendering because StatusBar:SetValue binds
+-- to the live secret; the text needs an explicit SetText, so it stalls.
+--
+-- Solution: one shared ticker polls all frames with the HEAL_ABSORB format
+-- every 0.25s. Frames opt in/out via DF:SetHealAbsorbTextPolling, driven
+-- from the HEAL_ABSORB branches in UpdateUnitFrame. Ticker auto-disables
+-- when no frames are using the format.
+-- ============================================================
+local healAbsorbTextFrames = {}
+local healAbsorbTicker
+
+local function HealAbsorbTextTickerTick()
+    for frame in pairs(healAbsorbTextFrames) do
+        if frame and frame.healthText and frame:IsVisible() then
+            DF:UpdateHealAbsorbText(frame)
+        end
+    end
+end
+
+function DF:SetHealAbsorbTextPolling(frame, enable)
+    if not frame then return end
+    if enable then
+        if not healAbsorbTextFrames[frame] then
+            healAbsorbTextFrames[frame] = true
+            if not healAbsorbTicker then
+                healAbsorbTicker = C_Timer.NewTicker(0.25, HealAbsorbTextTickerTick)
+            end
+        end
+    else
+        if healAbsorbTextFrames[frame] then
+            healAbsorbTextFrames[frame] = nil
+            if healAbsorbTicker and not next(healAbsorbTextFrames) then
+                healAbsorbTicker:Cancel()
+                healAbsorbTicker = nil
+            end
+        end
+    end
 end
 
 -- ============================================================
