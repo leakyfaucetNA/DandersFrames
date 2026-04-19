@@ -30,3 +30,4 @@ _Reference/*
 
 # Automation (local agent scripts, MCP server, logs)
 _Automation/
+update.sh
