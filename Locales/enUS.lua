@@ -1221,6 +1221,7 @@ L["Spark"] = true
 L["Specialization data not available."] = true
 L["Spell Name"] = true
 L["Spells flagged as important by Blizzard."] = true
+L["Speed"] = true
 L["Stack Count"] = true
 L["START"] = true
 L["Start"] = true

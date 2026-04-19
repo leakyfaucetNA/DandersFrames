@@ -6653,16 +6653,34 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         currentSection = hoverSection
         
         local function HideHoverOptions(d) return d.hoverHighlightMode == "NONE" end
-        
+        -- Border geometry (Thickness/Inset) only applies to border-style modes
+        local function HideHoverBorderOnly(d) return d.hoverHighlightMode == "NONE" or d.hoverHighlightMode == "HEALTHBAR" end
+        -- Texture dropdown only applies to the HEALTHBAR mode
+        local function HideHoverTextureOnly(d) return d.hoverHighlightMode ~= "HEALTHBAR" end
+
+        -- Hover mode dropdown includes an extra HEALTHBAR entry for
+        -- the health-fill texture overlay (not applicable to Selection/Aggro).
+        local hoverModes = {
+            ["NONE"] = L["Hidden"],
+            ["SOLID"] = L["Solid Border"],
+            ["ANIMATED"] = L["Animated Border"],
+            ["DASHED"] = L["Dashed Border"],
+            ["GLOW"] = L["Glow"],
+            ["CORNERS"] = L["Corners Only"],
+            ["HEALTHBAR"] = L["Health Bar"],
+        }
+
         local hoverGroup = GUI:CreateSettingsGroup(self.child, 260)
         hoverGroup:AddWidget(GUI:CreateHeader(self.child, L["Hover Settings"]), 40)
-        hoverGroup:AddWidget(GUI:CreateDropdown(self.child, L["Mode"], highlightModes, db, "hoverHighlightMode", function()
+        hoverGroup:AddWidget(GUI:CreateDropdown(self.child, L["Mode"], hoverModes, db, "hoverHighlightMode", function()
             self:RefreshStates()
         end), 55)
         local hoverThick = hoverGroup:AddWidget(GUI:CreateSlider(self.child, L["Thickness"], 1, 10, 1, db, "hoverHighlightThickness", nil, function() DF:LightweightUpdateHighlight("hover") end, true), 55)
-        hoverThick.hideOn = HideHoverOptions
+        hoverThick.hideOn = HideHoverBorderOnly
         local hoverInset = hoverGroup:AddWidget(GUI:CreateSlider(self.child, L["Inset"], -10, 10, 1, db, "hoverHighlightInset", nil, function() DF:LightweightUpdateHighlight("hover") end, true), 55)
-        hoverInset.hideOn = HideHoverOptions
+        hoverInset.hideOn = HideHoverBorderOnly
+        local hoverTexture = hoverGroup:AddWidget(GUI:CreateTextureDropdown(self.child, L["Texture"], db, "hoverHighlightTexture", function() DF:LightweightUpdateHighlight("hover") end), 55)
+        hoverTexture.hideOn = HideHoverTextureOnly
         local hoverAlpha = hoverGroup:AddWidget(GUI:CreateSlider(self.child, L["Alpha"], 0.1, 1.0, 0.05, db, "hoverHighlightAlpha", nil, function() DF:LightweightUpdateHighlight("hover") end, true), 55)
         hoverAlpha.hideOn = HideHoverOptions
         local hoverCol = hoverGroup:AddWidget(GUI:CreateColorPicker(self.child, L["Color"], db, "hoverHighlightColor", false, nil, function() DF:LightweightUpdateHighlight("hover") end, true), 35)
@@ -6892,13 +6910,13 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
         end, function() DF:LightweightUpdateDispelOverlay() end, true), 55)
         glowThickness.hideOn = HideGlowOptions
-        local glowOffset = pixelGlowGroup:AddWidget(GUI:CreateSlider(self.child, L["Glow Offset"], -4, 8, 1, db, "dispelPixelGlowOffset", function()
+        local glowOffset = pixelGlowGroup:AddWidget(GUI:CreateSlider(self.child, L["Glow Offset"], -40, 40, 1, db, "dispelPixelGlowOffset", function()
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
         end, function() DF:LightweightUpdateDispelOverlay() end, true), 55)
         glowOffset.hideOn = HideGlowOptions
-        local glowSpeed = pixelGlowGroup:AddWidget(GUI:CreateSlider(self.child, L["Glow Speed"], 0.1, 2.0, 0.1, db, "dispelPixelGlowSpeed", function()
+        local glowSpeed = pixelGlowGroup:AddWidget(GUI:CreateSlider(self.child, L["Glow Speed"], 0.1, 3.0, 0.1, db, "dispelPixelGlowSpeed", function()
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
-        end, nil, true), 55)
+        end, function() DF:LightweightUpdateDispelOverlay() end, true), 55)
         glowSpeed.hideOn = HideGlowOptions
         local glowAlpha = pixelGlowGroup:AddWidget(GUI:CreateSlider(self.child, L["Glow Opacity"], 0.1, 1.0, 0.1, db, "dispelPixelGlowAlpha", function()
             InvalidateCurves()

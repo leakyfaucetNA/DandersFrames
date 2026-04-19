@@ -905,6 +905,7 @@ DF.ExportCategories = {
         "hoverHighlightColor",
         "hoverHighlightInset",
         "hoverHighlightMode",
+        "hoverHighlightTexture",
         "hoverHighlightThickness",
         
         -- Health Threshold Fading

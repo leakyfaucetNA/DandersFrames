@@ -54,6 +54,7 @@ local borderCurve = nil
 local gradientCurve = nil
 local nameTextCurve = nil
 local iconCurves = {}  -- Per-type curves for icons
+local pixelGlowCurve = nil
 
 -- Invalidate all curves when settings change
 function DF:InvalidateDispelColorCurve()
@@ -61,6 +62,7 @@ function DF:InvalidateDispelColorCurve()
     gradientCurve = nil
     nameTextCurve = nil
     iconCurves = {}
+    pixelGlowCurve = nil
     -- Also invalidate debuff border curve
     DF.debuffBorderCurve = nil
 end
@@ -121,10 +123,26 @@ local function GetBorderCurve(db)
     if borderCurve then
         return borderCurve
     end
-    
+
     local alpha = db.dispelBorderAlpha or 0.8
     borderCurve = BuildElementCurve(alpha, db)
     return borderCurve
+end
+
+-- ============================================================
+-- GET PIXEL GLOW CURVE
+-- Uses pixel glow alpha from settings.
+-- Fed to the ANIMATED border animator via ch.animColor so the
+-- secret-safe dash colour path is used (no Lua-side comparisons).
+-- ============================================================
+
+local function GetPixelGlowCurve(db)
+    if pixelGlowCurve then
+        return pixelGlowCurve
+    end
+    local alpha = db.dispelPixelGlowAlpha or 0.8
+    pixelGlowCurve = BuildElementCurve(alpha, db)
+    return pixelGlowCurve
 end
 
 -- ============================================================
@@ -433,40 +451,30 @@ local function CreateDispelOverlay(frame)
 
     -- ============================================================
     -- PIXEL GLOW FRAME
-    -- Parented to the unit frame (not the overlay) so its pulse
-    -- animation is independent of the overlay's own pulse anim.
-    -- Uses the same GLOW style as the Highlights/AuraDesigner system.
+    -- Parented to UIParent (matching AuraDesigner border setup) so
+    -- the outer GLOW layers aren't clipped by the unit frame's bounds.
+    -- Pulse animation stays independent of the overlay's own pulse.
     -- ============================================================
-    local glowFrame = CreateFrame("Frame", nil, frame)
-    glowFrame:SetAllPoints(frame)
-    glowFrame:SetFrameLevel(frame:GetFrameLevel() + 5)  -- Just below overlay (+6)
+    local glowFrame = CreateFrame("Frame", nil, UIParent)
+    glowFrame:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    glowFrame:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+    glowFrame:SetFrameStrata(frame:GetFrameStrata())
+    glowFrame:SetFrameLevel(frame:GetFrameLevel() + 8)
     glowFrame:Hide()
 
-    -- Dummy edge textures required by ApplyHighlightStyle (hidden by GLOW branch)
+    -- Hide the glow when the owning unit frame hides (since glow is
+    -- parented to UIParent, it doesn't inherit the frame's visibility).
+    frame:HookScript("OnHide", function()
+        if frame.dfDispelOverlay and frame.dfDispelOverlay.pixelGlowFrame then
+            frame.dfDispelOverlay.pixelGlowFrame:Hide()
+        end
+    end)
+
+    -- Edge textures required by ApplyHighlightStyle (used by ANIMATED mode)
     glowFrame.topLine    = glowFrame:CreateTexture(nil, "OVERLAY")
     glowFrame.bottomLine = glowFrame:CreateTexture(nil, "OVERLAY")
     glowFrame.leftLine   = glowFrame:CreateTexture(nil, "OVERLAY")
     glowFrame.rightLine  = glowFrame:CreateTexture(nil, "OVERLAY")
-
-    -- Independent pulse animation for the glow (speed-controlled)
-    glowFrame.pulseAnim = glowFrame:CreateAnimationGroup()
-    glowFrame.pulseAnim:SetLooping("REPEAT")
-    local glowFadeOut = glowFrame.pulseAnim:CreateAnimation("Alpha")
-    glowFadeOut:SetFromAlpha(1)
-    glowFadeOut:SetToAlpha(0.2)
-    glowFadeOut:SetDuration(0.5)
-    glowFadeOut:SetOrder(1)
-    glowFadeOut:SetSmoothing("IN_OUT")
-    local glowFadeIn = glowFrame.pulseAnim:CreateAnimation("Alpha")
-    glowFadeIn:SetFromAlpha(0.2)
-    glowFadeIn:SetToAlpha(1)
-    glowFadeIn:SetDuration(0.5)
-    glowFadeIn:SetOrder(2)
-    glowFadeIn:SetSmoothing("IN_OUT")
-    -- Store references so we can update durations when speed changes
-    glowFrame.dfGlowFadeOut = glowFadeOut
-    glowFrame.dfGlowFadeIn  = glowFadeIn
-    glowFrame.dfGlowSpeed   = 0.5  -- cached to detect changes
 
     overlay.pixelGlowFrame = glowFrame
 
@@ -509,9 +517,6 @@ local function LayoutStateChanged(overlay, db)
         or overlay.dfL_healthOrientation       ~= db.healthOrientation
         or overlay.dfL_parentH                 ~= parentH
         or overlay.dfL_parentW                 ~= parentW
-        or overlay.dfL_pixelGlowEnabled        ~= db.dispelPixelGlowEnabled
-        or overlay.dfL_pixelGlowThickness      ~= db.dispelPixelGlowThickness
-        or overlay.dfL_pixelGlowOffset         ~= db.dispelPixelGlowOffset
 end
 
 local function CacheLayoutState(overlay, db)
@@ -531,9 +536,6 @@ local function CacheLayoutState(overlay, db)
     overlay.dfL_healthOrientation       = db.healthOrientation
     overlay.dfL_parentH                 = gradientParent and gradientParent:GetHeight() or 40
     overlay.dfL_parentW                 = gradientParent and gradientParent:GetWidth() or 80
-    overlay.dfL_pixelGlowEnabled        = db.dispelPixelGlowEnabled
-    overlay.dfL_pixelGlowThickness      = db.dispelPixelGlowThickness
-    overlay.dfL_pixelGlowOffset         = db.dispelPixelGlowOffset
 end
 
 local function ApplyOverlayLayout(overlay, db, frame)
@@ -730,25 +732,6 @@ local function ApplyOverlayLayout(overlay, db, frame)
             overlay.gradient:SetMinMaxValues(0, 1)
             overlay.gradient:SetValue(1)
             overlay.gradientTracksHealth = false
-        end
-    end
-
-    -- Pixel glow layout: position the glow layers when settings change.
-    -- Color is applied cheaply in ShowOverlayWithRGB via UpdateHighlightStyleColor.
-    if overlay.pixelGlowFrame then
-        if db.dispelPixelGlowEnabled then
-            local glowThickness = db.dispelPixelGlowThickness or 2
-            local glowOffset    = db.dispelPixelGlowOffset or 0
-            -- Use white as a placeholder colour; ShowOverlayWithRGB applies
-            -- the real dispel colour immediately after via UpdateHighlightStyleColor.
-            DF.ApplyHighlightStyle(overlay.pixelGlowFrame, "GLOW", glowThickness, glowOffset, 1, 1, 1, 1)
-        else
-            -- Hide glow layers if present
-            if overlay.pixelGlowFrame.glowLayers then
-                for _, layer in ipairs(overlay.pixelGlowFrame.glowLayers) do
-                    layer:Hide()
-                end
-            end
         end
     end
 
@@ -1194,9 +1177,69 @@ local function ShowOverlayWithSecretColor(overlay, db, unit, auraInstanceID, fra
         end
         overlay:SetAlpha(1)
     end
-    
+
+    -- Pixel glow (ANIMATED marching-dash border, secret-colour path).
+    -- The Color returned by GetAuraDispelTypeColor is applied via
+    -- ch.animColor so the animator skips its tainting Lua comparisons.
+    --
+    -- Perf: only bump animColorVersion when the underlying source
+    -- (auraInstanceID or curve identity) actually changes. Each dash
+    -- caches the last-applied version, so unchanged ticks skip
+    -- SetColorTexture entirely — matching LibCustomGlow's "set colour
+    -- once per state change" amortisation.
+    local glow = overlay.pixelGlowFrame
+    if glow then
+        if db.dispelPixelGlowEnabled then
+            local glowCurve = GetPixelGlowCurve(db)
+            local glowColor = glowCurve and C_UnitAuras.GetAuraDispelTypeColor(unit, auraInstanceID, glowCurve)
+            if glowColor then
+                local glowThickness = db.dispelPixelGlowThickness or 2
+                local glowOffset    = db.dispelPixelGlowOffset or 0
+                glow.animSpeedMult  = db.dispelPixelGlowSpeed or 1.0
+                -- Only rebuild geometry when layout actually changed or
+                -- the animated border isn't live on this frame yet.
+                if glow.dfGlow_thickness ~= glowThickness or glow.dfGlow_inset ~= glowOffset or not glow.dfGlow_active then
+                    -- Placeholder RGB of 1,1,1 — immediately overridden by animColor below.
+                    DF.ApplyHighlightStyle(glow, "ANIMATED", glowThickness, glowOffset, 1, 1, 1, 1)
+                    glow.dfGlow_thickness = glowThickness
+                    glow.dfGlow_inset     = glowOffset
+                    glow.dfGlow_active    = true
+                    -- Dashes are fresh from the pool; force a colour push next tick.
+                    glow.animColorVersion = (glow.animColorVersion or 0) + 1
+                    glow.dfGlow_auraID    = auraInstanceID
+                    glow.dfGlow_curveSig  = glowCurve
+                elseif glow.dfGlow_auraID ~= auraInstanceID or glow.dfGlow_curveSig ~= glowCurve then
+                    -- Aura identity or colour curve changed — colour may differ,
+                    -- so bump the version so dashes re-apply on the next tick.
+                    glow.animColorVersion = (glow.animColorVersion or 0) + 1
+                    glow.dfGlow_auraID    = auraInstanceID
+                    glow.dfGlow_curveSig  = glowCurve
+                end
+                -- Hand the Color object to the animator. When the version
+                -- matches dfLastColorV on each dash, no SetColorTexture fires.
+                glow.animColor = glowColor
+                glow:Show()
+            elseif glow.dfGlow_active then
+                -- No colour this tick (e.g. curve not yet built); tear down.
+                DF.ApplyHighlightStyle(glow, "NONE")
+                glow.animColor       = nil
+                glow.dfGlow_active   = false
+                glow.dfGlow_auraID   = nil
+                glow.dfGlow_curveSig = nil
+                glow:Hide()
+            end
+        elseif glow.dfGlow_active then
+            DF.ApplyHighlightStyle(glow, "NONE")
+            glow.animColor       = nil
+            glow.dfGlow_active   = false
+            glow.dfGlow_auraID   = nil
+            glow.dfGlow_curveSig = nil
+            glow:Hide()
+        end
+    end
+
     overlay:Show()
-    
+
     -- Update gradient health value if tracking current health
     if overlay.gradientTracksHealth then
         DF:UpdateDispelGradientHealth(frame)
@@ -1387,40 +1430,38 @@ local function ShowOverlayWithRGB(overlay, r, g, b, db, dispelType, oorAlphaMult
         overlay:SetAlpha(1)
     end
 
-    -- Pixel glow: cheap per-call path (layout already handled by ApplyOverlayLayout)
-    if db.dispelPixelGlowEnabled and overlay.pixelGlowFrame then
-        local glowAlpha = (db.dispelPixelGlowAlpha or 0.8) * oorAlphaMultiplier
-        -- UpdateHighlightStyleColor only sets border colour on existing layers — no repositioning
-        DF.UpdateHighlightStyleColor(overlay.pixelGlowFrame, "GLOW", r, g, b, glowAlpha)
-        overlay.pixelGlowFrame:Show()
-
-        -- Manage independent pulse animation; only stop/restart when speed changes
-        local glowSpeed = db.dispelPixelGlowSpeed or 0.5
-        if glowSpeed > 0 and overlay.pixelGlowFrame.pulseAnim then
-            if overlay.pixelGlowFrame.dfGlowSpeed ~= glowSpeed then
-                -- Speed changed — update animation durations
-                local wasPlaying = overlay.pixelGlowFrame.pulseAnim:IsPlaying()
-                if wasPlaying then overlay.pixelGlowFrame.pulseAnim:Stop() end
-                overlay.pixelGlowFrame.dfGlowFadeOut:SetDuration(glowSpeed)
-                overlay.pixelGlowFrame.dfGlowFadeIn:SetDuration(glowSpeed)
-                overlay.pixelGlowFrame.dfGlowSpeed = glowSpeed
-                if wasPlaying then overlay.pixelGlowFrame.pulseAnim:Play() end
+    -- Pixel glow (ANIMATED marching-dash border, same as Aura Designer's Animated Border)
+    local glow = overlay.pixelGlowFrame
+    if glow then
+        if db.dispelPixelGlowEnabled then
+            local glowThickness = db.dispelPixelGlowThickness or 2
+            local glowOffset    = db.dispelPixelGlowOffset or 0
+            local glowAlpha     = (db.dispelPixelGlowAlpha or 0.8) * oorAlphaMultiplier
+            -- Test/RGB path uses plain r/g/b; clear any stale secret Color
+            -- object left over from a previous live-combat tick so the
+            -- animator falls back to ch.animR/G/B/A.
+            glow.animColor = nil
+            -- Speed multiplier on the shared marching-dash animator
+            glow.animSpeedMult  = db.dispelPixelGlowSpeed or 1.0
+            -- Change-detection: full ApplyHighlightStyle only when layout changed
+            -- or the animated border hasn't been initialised on this frame yet.
+            if glow.dfGlow_thickness ~= glowThickness or glow.dfGlow_inset ~= glowOffset or not glow.dfGlow_active then
+                DF.ApplyHighlightStyle(glow, "ANIMATED", glowThickness, glowOffset, r, g, b, glowAlpha)
+                glow.dfGlow_thickness = glowThickness
+                glow.dfGlow_inset     = glowOffset
+                glow.dfGlow_active    = true
+            else
+                -- Cheap path: just update animR/G/B/A; animator picks up next tick
+                DF.UpdateHighlightStyleColor(glow, "ANIMATED", r, g, b, glowAlpha)
             end
-            if not overlay.pixelGlowFrame.pulseAnim:IsPlaying() then
-                overlay.pixelGlowFrame.pulseAnim:Play()
-            end
-        elseif overlay.pixelGlowFrame.pulseAnim then
-            if overlay.pixelGlowFrame.pulseAnim:IsPlaying() then
-                overlay.pixelGlowFrame.pulseAnim:Stop()
-            end
-            overlay.pixelGlowFrame:SetAlpha(1)
+            glow:Show()
+        elseif glow.dfGlow_active then
+            -- Tear down the animated border cleanly (removes from global animator)
+            DF.ApplyHighlightStyle(glow, "NONE")
+            glow.animColor    = nil
+            glow.dfGlow_active = false
+            glow:Hide()
         end
-    elseif overlay.pixelGlowFrame then
-        if overlay.pixelGlowFrame.pulseAnim and overlay.pixelGlowFrame.pulseAnim:IsPlaying() then
-            overlay.pixelGlowFrame.pulseAnim:Stop()
-        end
-        overlay.pixelGlowFrame:SetAlpha(1)
-        overlay.pixelGlowFrame:Hide()
     end
 
     overlay:Show()
@@ -1479,12 +1520,13 @@ local function HideOverlay(overlay)
         end
     end
     
-    -- Hide pixel glow and stop its animation
+    -- Tear down pixel glow (removes from global animator, hides dashes)
+    if overlay.pixelGlowFrame and overlay.pixelGlowFrame.dfGlow_active then
+        DF.ApplyHighlightStyle(overlay.pixelGlowFrame, "NONE")
+        overlay.pixelGlowFrame.dfGlow_active = false
+    end
     if overlay.pixelGlowFrame then
-        if overlay.pixelGlowFrame.pulseAnim and overlay.pixelGlowFrame.pulseAnim:IsPlaying() then
-            overlay.pixelGlowFrame.pulseAnim:Stop()
-        end
-        overlay.pixelGlowFrame:SetAlpha(1)
+        overlay.pixelGlowFrame.animColor = nil
         overlay.pixelGlowFrame:Hide()
     end
 

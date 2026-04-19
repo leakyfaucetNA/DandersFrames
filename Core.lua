@@ -1176,7 +1176,10 @@ function DF:LightweightUpdateDispelOverlay()
                 local glowThickness = db.dispelPixelGlowThickness or 2
                 local glowOffset    = db.dispelPixelGlowOffset or 0
                 local glowAlpha     = (db.dispelPixelGlowAlpha or 0.8) * oorMultiplier
-                DF.ApplyHighlightStyle(overlay.pixelGlowFrame, "GLOW", glowThickness, glowOffset, r, g, b, glowAlpha)
+                DF.ApplyHighlightStyle(overlay.pixelGlowFrame, "ANIMATED", glowThickness, glowOffset, r, g, b, glowAlpha)
+                overlay.pixelGlowFrame.dfGlow_thickness = glowThickness
+                overlay.pixelGlowFrame.dfGlow_inset     = glowOffset
+                overlay.pixelGlowFrame.dfGlow_active    = true
             end
         end
     end
@@ -2398,10 +2401,10 @@ function DF:LightweightUpdateDispelColors()
             tex:SetVertexColor(r * gradientIntensity, g * gradientIntensity, b * gradientIntensity, gradientAlpha)
         end
 
-        -- Update pixel glow colour
+        -- Update pixel glow colour (ANIMATED mode — cheap, animator picks up next tick)
         if overlay.pixelGlowFrame and overlay.pixelGlowFrame:IsShown() and db.dispelPixelGlowEnabled then
             local glowAlpha = db.dispelPixelGlowAlpha or 0.8
-            DF.UpdateHighlightStyleColor(overlay.pixelGlowFrame, "GLOW", r, g, b, glowAlpha)
+            DF.UpdateHighlightStyleColor(overlay.pixelGlowFrame, "ANIMATED", r, g, b, glowAlpha)
         end
     end
 

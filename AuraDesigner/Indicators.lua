@@ -870,8 +870,13 @@ local function ApplyBorderToOverlay(ch, frame, config, auraData)
     local alpha = color[4] or color.a or 1
     local thickness = config.thickness or 2
     local inset = config.inset or 0
+    local speed = config.speed or 1.0
 
     local style = BORDER_STYLE_MIGRATION[config.style] or config.style or "SOLID"
+
+    -- Speed multiplier applies to the ANIMATED animator; update it each call
+    -- so slider drags take effect immediately without triggering a full rebuild.
+    ch.animSpeedMult = speed
 
     local auraID = auraData and auraData.auraInstanceID
     local expiringPulsate = config.expiringPulsate or false

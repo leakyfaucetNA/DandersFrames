@@ -476,7 +476,7 @@ local function EnsureTypeConfig(auraName, typeKey)
         elseif typeKey == "border" then
             auraCfg[typeKey] = {
                 style = "SOLID", color = {r = 1, g = 1, b = 1, a = 1},
-                thickness = 2, inset = 0,
+                thickness = 2, inset = 0, speed = 1.0,
                 expiringEnabled = false, expiringThreshold = 30, expiringThresholdMode = "PERCENT",
                 expiringColor = {r = 1, g = 0.2, b = 0.2, a = 1},
                 expiringPulsate = false,
@@ -1901,6 +1901,7 @@ local function RefreshPreviewEffects()
         local clr = auraCfg.border.color or {r = 1, g = 1, b = 1, a = 1}
         local thickness = auraCfg.border.thickness or 2
         local inset = auraCfg.border.inset or 0
+        local speed = auraCfg.border.speed or 1.0
         -- Migrate old style names (Solid→SOLID, Glow→GLOW, Pulse→SOLID)
         local style = auraCfg.border.style or "SOLID"
         if style == "Solid" then style = "SOLID"
@@ -1910,11 +1911,13 @@ local function RefreshPreviewEffects()
         if auraCfg.border.borderMode == "custom" then
             -- Custom border: independent overlay per aura (can stack with shared + other custom)
             local ch = GetOrCreatePreviewCustomBorder(mockFrame, auraName)
+            ch.animSpeedMult = speed
             DF.ApplyHighlightStyle(ch, style, thickness, inset,
                 clr.r or 1, clr.g or 1, clr.b or 1, clr.a or 1)
         elseif not sharedBorderClaimed and framePreview.borderOverlay then
             -- Shared border: first claim wins (matches live frame priority system)
             sharedBorderClaimed = true
+            framePreview.borderOverlay.animSpeedMult = speed
             DF.ApplyHighlightStyle(framePreview.borderOverlay, style, thickness, inset,
                 clr.r or 1, clr.g or 1, clr.b or 1, clr.a or 1)
         end
@@ -2665,6 +2668,7 @@ local function BuildTypeContent(parent, typeKey, auraName, width, optProxy, yOff
             g:AddWidget(GUI:CreateColorPicker(parent, L["Color"], proxy, "color", true, RPL, RPL, true), 28)
             g:AddWidget(GUI:CreateSlider(parent, L["Thickness"], 1, 8, 1, proxy, "thickness"), 54)
             g:AddWidget(GUI:CreateSlider(parent, L["Inset"], 0, 8, 1, proxy, "inset"), 54)
+            g:AddWidget(GUI:CreateSlider(parent, L["Speed"], 0.1, 3.0, 0.1, proxy, "speed"), 54)
             g:AddWidget(GUI:CreateCheckbox(parent, L["Show When Missing"], proxy, "showWhenMissing", function()
                 DF.AuraDesigner.Engine:ForceRefreshAllFrames()
             end), 28)

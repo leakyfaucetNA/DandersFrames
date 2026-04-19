@@ -1105,7 +1105,7 @@ DF.PartyDefaults = {
     dispelPixelGlowAlpha = 0.8,
     dispelPixelGlowEnabled = false,
     dispelPixelGlowOffset = 0,
-    dispelPixelGlowSpeed = 0.5,
+    dispelPixelGlowSpeed = 1.0,
     dispelPixelGlowThickness = 2,
     dispelGradientAlpha = 1,
     dispelGradientBlendMode = "BLEND",
@@ -1284,6 +1284,7 @@ DF.PartyDefaults = {
     hoverHighlightColor = {r = 1, g = 1, b = 1, a = 1},
     hoverHighlightInset = 0,
     hoverHighlightMode = "CORNERS",
+    hoverHighlightTexture = "Interface\\TargetingFrame\\UI-StatusBar",
     hoverHighlightThickness = 2,
 
     -- Leader Icon
@@ -2410,7 +2411,7 @@ DF.RaidDefaults = {
     dispelPixelGlowAlpha = 0.8,
     dispelPixelGlowEnabled = false,
     dispelPixelGlowOffset = 0,
-    dispelPixelGlowSpeed = 0.5,
+    dispelPixelGlowSpeed = 1.0,
     dispelPixelGlowThickness = 2,
     dispelGradientAlpha = 1,
     dispelGradientBlendMode = "BLEND",
@@ -2589,6 +2590,7 @@ DF.RaidDefaults = {
     hoverHighlightColor = {r = 1, g = 1, b = 1, a = 1},
     hoverHighlightInset = 0,
     hoverHighlightMode = "CORNERS",
+    hoverHighlightTexture = "Interface\\TargetingFrame\\UI-StatusBar",
     hoverHighlightThickness = 2,
 
     -- Leader Icon

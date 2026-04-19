@@ -44,11 +44,27 @@ local function SelectionAnimator_OnUpdate(self, elapsed)
     self.elapsed = self.elapsed + elapsed
     self.accum = self.accum + elapsed
     if self.accum < UPDATE_INTERVAL then return end
+    local dt = self.accum
     self.accum = 0
-    local offset = (self.elapsed * ANIMATION_SPEED) % PATTERN_LENGTH
+    -- Baseline offset for frames without a per-instance multiplier.
+    -- Kept continuous with `self.elapsed` so existing callers see no
+    -- behaviour change.
+    local baseOffset = (self.elapsed * ANIMATION_SPEED) % PATTERN_LENGTH
     for highlightFrame in pairs(self.frames) do
         if highlightFrame:IsShown() then
-            DF:UpdateAnimatedBorder(highlightFrame, offset)
+            local mult = highlightFrame.animSpeedMult
+            if mult and mult ~= 1 then
+                -- Per-instance accumulated offset — avoids position
+                -- jumps when the multiplier changes mid-animation.
+                local off = (highlightFrame.animOffset or baseOffset) + dt * ANIMATION_SPEED * mult
+                off = off % PATTERN_LENGTH
+                highlightFrame.animOffset = off
+                DF:UpdateAnimatedBorder(highlightFrame, off)
+            else
+                -- Default path: keep frames in sync with the global offset.
+                highlightFrame.animOffset = baseOffset
+                DF:UpdateAnimatedBorder(highlightFrame, baseOffset)
+            end
         end
     end
 end
@@ -118,7 +134,13 @@ end
 -- still runs because previously-hidden dashes can become visible as the
 -- ants march across the edge.
 
-local function DrawHorizontalEdge(ch, border, dashes, isTop, edgeOffset, width, thick, inset, r, g, b, a)
+-- Secret-colour path: the caller sets `ch.animColor` (a Color object)
+-- and bumps `ch.animColorVersion` when the underlying source changes.
+-- Each dash caches the last-applied version, so unchanged colour ticks
+-- skip the `SetColorTexture` call entirely — matching LibCustomGlow's
+-- "set colour once per state change" behaviour while staying taint-safe
+-- (only integer versions are compared, never the secret RGBA).
+local function DrawHorizontalEdge(ch, border, dashes, isTop, edgeOffset, width, thick, inset, r, g, b, a, secretColor, colorVersion)
     local numDashes = math.ceil(width / PATTERN_LENGTH) + 2
     -- Hide only the trailing dashes we won't touch this frame
     for i = numDashes + 1, #dashes do dashes[i]:Hide() end
@@ -140,7 +162,14 @@ local function DrawHorizontalEdge(ch, border, dashes, isTop, edgeOffset, width, 
             else
                 dash:SetPoint("BOTTOMLEFT", ch, "BOTTOMLEFT", inset + visStart, inset)
             end
-            if dash.dfLastR ~= r or dash.dfLastG ~= g or dash.dfLastB ~= b or dash.dfLastA ~= a then
+            if secretColor then
+                -- Taint-safe version compare: skip SetColorTexture when
+                -- the caller hasn't bumped animColorVersion since last tick.
+                if dash.dfLastColorV ~= colorVersion then
+                    dash:SetColorTexture(secretColor:GetRGBA())
+                    dash.dfLastColorV = colorVersion
+                end
+            elseif dash.dfLastR ~= r or dash.dfLastG ~= g or dash.dfLastB ~= b or dash.dfLastA ~= a then
                 dash:SetColorTexture(r, g, b, a)
                 dash.dfLastR, dash.dfLastG, dash.dfLastB, dash.dfLastA = r, g, b, a
             end
@@ -151,7 +180,7 @@ local function DrawHorizontalEdge(ch, border, dashes, isTop, edgeOffset, width, 
     end
 end
 
-local function DrawVerticalEdge(ch, border, dashes, isRight, edgeOffset, height, thick, inset, r, g, b, a)
+local function DrawVerticalEdge(ch, border, dashes, isRight, edgeOffset, height, thick, inset, r, g, b, a, secretColor, colorVersion)
     local numDashes = math.ceil(height / PATTERN_LENGTH) + 2
     for i = numDashes + 1, #dashes do dashes[i]:Hide() end
     local startPos = -(edgeOffset % PATTERN_LENGTH)
@@ -172,7 +201,12 @@ local function DrawVerticalEdge(ch, border, dashes, isRight, edgeOffset, height,
             else
                 dash:SetPoint("TOPLEFT", ch, "TOPLEFT", inset, -inset - visStart)
             end
-            if dash.dfLastR ~= r or dash.dfLastG ~= g or dash.dfLastB ~= b or dash.dfLastA ~= a then
+            if secretColor then
+                if dash.dfLastColorV ~= colorVersion then
+                    dash:SetColorTexture(secretColor:GetRGBA())
+                    dash.dfLastColorV = colorVersion
+                end
+            elseif dash.dfLastR ~= r or dash.dfLastG ~= g or dash.dfLastB ~= b or dash.dfLastA ~= a then
                 dash:SetColorTexture(r, g, b, a)
                 dash.dfLastR, dash.dfLastG, dash.dfLastB, dash.dfLastA = r, g, b, a
             end
@@ -188,7 +222,14 @@ function DF:UpdateAnimatedBorder(ch, offset)
     if not border then return end
     local thick = ch.animThickness or 2
     local inset = ch.animInset or 0
-    local r, g, b, a = ch.animR or 1, ch.animG or 1, ch.animB or 1, ch.animA or 1
+    -- When ch.animColor is set (a Color object from C_UnitAuras.*), use
+    -- the secret-safe path. r/g/b/a are only read when animColor is nil.
+    local secretColor = ch.animColor
+    local colorVersion = ch.animColorVersion
+    local r, g, b, a
+    if not secretColor then
+        r, g, b, a = ch.animR or 1, ch.animG or 1, ch.animB or 1, ch.animA or 1
+    end
     local frameWidth, frameHeight = ch:GetWidth(), ch:GetHeight()
     if frameWidth <= 0 or frameHeight <= 0 then return end
     
@@ -199,10 +240,10 @@ function DF:UpdateAnimatedBorder(ch, offset)
 
     -- Counter-clockwise marching ants:
     -- Bottom: moves left, Left: moves up, Top: moves right, Right: moves down
-    DrawHorizontalEdge(ch, border, border.bottomDashes, false, offset, width, thick, inset, r, g, b, a)
-    DrawVerticalEdge(ch, border, border.leftDashes, false, width + offset, height, thick, inset, r, g, b, a)
-    DrawHorizontalEdge(ch, border, border.topDashes, true, width + height - offset, width, thick, inset, r, g, b, a)
-    DrawVerticalEdge(ch, border, border.rightDashes, true, (2 * width) + height - offset, height, thick, inset, r, g, b, a)
+    DrawHorizontalEdge(ch, border, border.bottomDashes, false, offset, width, thick, inset, r, g, b, a, secretColor, colorVersion)
+    DrawVerticalEdge(ch, border, border.leftDashes, false, width + offset, height, thick, inset, r, g, b, a, secretColor, colorVersion)
+    DrawHorizontalEdge(ch, border, border.topDashes, true, width + height - offset, width, thick, inset, r, g, b, a, secretColor, colorVersion)
+    DrawVerticalEdge(ch, border, border.rightDashes, true, (2 * width) + height - offset, height, thick, inset, r, g, b, a, secretColor, colorVersion)
 end
 
 local function HideAnimatedBorder(ch)
@@ -285,27 +326,31 @@ end
 
 local function ApplyHighlightStyle(ch, mode, thickness, inset, r, g, b, alpha, db)
     if not ch then return end
-    
+
     local top, bottom, left, right = ch.topLine, ch.bottomLine, ch.leftLine, ch.rightLine
-    
+
     -- Hide all styles first
     top:Hide() bottom:Hide() left:Hide() right:Hide()
     HideAnimatedBorder(ch)
     HideCornerTextures(ch)
     HideGlowLayers(ch)
     SelectionAnimator_Remove(ch)
-    
+
+    -- "NONE" has no geometry — return before the pixel-snap math, which
+    -- would otherwise multiply a nil thickness.
+    if mode == "NONE" then
+        ch:Hide()
+        return
+    end
+
     -- Snap thickness to whole screen pixels so every +1 step is visible
     local scale = UIParent:GetEffectiveScale()
     local minThickness = 1 / scale
     local px = thickness * scale              -- desired thickness in pixels
     px = math.max(1, math.ceil(px - 0.01))    -- round up (with tiny epsilon for exact integers)
     thickness = px / scale
-    
-    if mode == "NONE" then
-        ch:Hide()
-        return
-    elseif mode == "SOLID" then
+
+    if mode == "SOLID" then
         top:SetColorTexture(r, g, b, alpha)
         bottom:SetColorTexture(r, g, b, alpha)
         left:SetColorTexture(r, g, b, alpha)
@@ -348,7 +393,10 @@ local function ApplyHighlightStyle(ch, mode, thickness, inset, r, g, b, alpha, d
             -- Draw immediately so dashes are visible this frame.
             -- Without this, HideAnimatedBorder (called above) leaves a
             -- one-frame gap until the next OnUpdate tick redraws them.
+            -- Seed animOffset from the current global position so
+            -- per-instance (multiplied) animations start in sync.
             local offset = (SelectionAnimator.elapsed * ANIMATION_SPEED) % PATTERN_LENGTH
+            ch.animOffset = offset
             DF:UpdateAnimatedBorder(ch, offset)
         else
             DF:UpdateAnimatedBorder(ch, 0)
@@ -529,6 +577,67 @@ local function UpdateHighlightStyleColor(ch, mode, r, g, b, alpha)
 end
 
 DF.UpdateHighlightStyleColor = UpdateHighlightStyleColor
+
+-- ============================================================
+-- HOVER HEALTHBAR OVERLAY
+-- A StatusBar parented to the unit frame's healthBar that mirrors
+-- its fill, tinted with a user-selected texture + colour. Used as
+-- the "HEALTHBAR" hover highlight mode — highlights the current
+-- health without drawing a frame border.
+-- ============================================================
+
+local function ApplyHoverHealthBar(frame, db, c, alpha)
+    local healthBar = frame.healthBar
+    if not healthBar then return nil end
+
+    local overlay = frame.dfHoverHealthBar
+    if not overlay then
+        overlay = CreateFrame("StatusBar", nil, healthBar)
+        overlay:SetAllPoints(healthBar)
+        overlay:SetFrameLevel(healthBar:GetFrameLevel() + 1)
+        overlay:SetStatusBarTexture("Interface\\Buttons\\WHITE8x8")
+        overlay:SetMinMaxValues(healthBar:GetMinMaxValues())
+        overlay:SetValue(healthBar:GetValue())
+        overlay:Hide()
+
+        -- Keep overlay's fill in sync with the real health bar.
+        -- Event-driven: zero polling cost when health isn't changing.
+        healthBar:HookScript("OnValueChanged", function(self, value)
+            if frame.dfHoverHealthBar then
+                frame.dfHoverHealthBar:SetValue(value)
+            end
+        end)
+        healthBar:HookScript("OnMinMaxChanged", function(self, minV, maxV)
+            if frame.dfHoverHealthBar then
+                frame.dfHoverHealthBar:SetMinMaxValues(minV, maxV)
+            end
+        end)
+        -- Mirror orientation / reverse-fill on each apply (below).
+
+        frame.dfHoverHealthBar = overlay
+    end
+
+    -- Mirror current fill state on each apply (covers the first frame
+    -- after creation and any orientation changes the user makes).
+    overlay:SetMinMaxValues(healthBar:GetMinMaxValues())
+    overlay:SetValue(healthBar:GetValue())
+    if healthBar.GetOrientation then
+        overlay:SetOrientation(healthBar:GetOrientation() or "HORIZONTAL")
+    end
+    if healthBar.GetReverseFill then
+        overlay:SetReverseFill(healthBar:GetReverseFill())
+    end
+
+    -- Apply the selected texture + tint
+    local tex = db.hoverHighlightTexture or "Interface\\TargetingFrame\\UI-StatusBar"
+    overlay:SetStatusBarTexture(tex)
+    local barTex = overlay:GetStatusBarTexture()
+    if barTex then
+        barTex:SetVertexColor(c.r, c.g, c.b, alpha)
+    end
+
+    return overlay
+end
 
 -- ============================================================
 -- UPDATE HIGHLIGHTS FOR A FRAME
@@ -725,32 +834,55 @@ function DF:UpdateHighlights(frame, forceSelection, forceAggro)
     local hoverMode = db.hoverHighlightMode or "NONE"
     local isHovered = frame.dfIsHovered
     local wantHover = isHovered and hoverMode ~= "NONE"
-    
+
     if wantHover then
         local c = db.hoverHighlightColor or {r = 1, g = 1, b = 1}
-        local hoverThickness = db.hoverHighlightThickness or 2
-        local hoverInset = db.hoverHighlightInset or 0
-        
-        -- Apply pixel-perfect adjustments
-        if db.pixelPerfect then
-            hoverThickness = DF:PixelPerfectThickness(hoverThickness)
-            hoverInset = DF:PixelPerfect(hoverInset)
+        local alpha = db.hoverHighlightAlpha or 0.8
+
+        if hoverMode == "HEALTHBAR" then
+            -- Tear down any border-style hover so the healthbar overlay owns it
+            HideAnimatedBorder(hoverHighlight)
+            HideGlowLayers(hoverHighlight)
+            HideCornerTextures(hoverHighlight)
+            if hoverHighlight.topLine    then hoverHighlight.topLine:Hide()    end
+            if hoverHighlight.bottomLine then hoverHighlight.bottomLine:Hide() end
+            if hoverHighlight.leftLine   then hoverHighlight.leftLine:Hide()   end
+            if hoverHighlight.rightLine  then hoverHighlight.rightLine:Hide()  end
+            hoverHighlight:Hide()
+            SelectionAnimator_Remove(hoverHighlight)
+
+            -- Show the healthbar-fill overlay (created lazily)
+            local overlay = ApplyHoverHealthBar(frame, db, c, alpha)
+            if overlay then overlay:Show() end
+        else
+            -- Border-style hover — hide the healthbar overlay if it exists
+            if frame.dfHoverHealthBar then frame.dfHoverHealthBar:Hide() end
+
+            local hoverThickness = db.hoverHighlightThickness or 2
+            local hoverInset = db.hoverHighlightInset or 0
+
+            -- Apply pixel-perfect adjustments
+            if db.pixelPerfect then
+                hoverThickness = DF:PixelPerfectThickness(hoverThickness)
+                hoverInset = DF:PixelPerfect(hoverInset)
+            end
+
+            ApplyHighlightStyle(
+                hoverHighlight,
+                hoverMode,
+                hoverThickness,
+                hoverInset,
+                c.r, c.g, c.b,
+                alpha,
+                db
+            )
         end
-        
-        ApplyHighlightStyle(
-            hoverHighlight,
-            hoverMode,
-            hoverThickness,
-            hoverInset,
-            c.r, c.g, c.b,
-            db.hoverHighlightAlpha or 0.8,
-            db
-        )
     else
         HideAnimatedBorder(hoverHighlight)
         HideGlowLayers(hoverHighlight)
         hoverHighlight:Hide()
         SelectionAnimator_Remove(hoverHighlight)
+        if frame.dfHoverHealthBar then frame.dfHoverHealthBar:Hide() end
     end
     
     -- Aggro Highlight
