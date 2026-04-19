@@ -768,6 +768,7 @@ L["Hide buffs from the buff bar when they are already displayed by the Defensive
 L["Hide Cooldown Swipe"] = true
 L["Hide duplicate buffs"] = true
 L["Hide in Combat"] = true
+L["Hide on Tanks"] = true
 L["Hide Casts Targeting You"] = true
 L["Hide Out-of-Combat Casts"] = true
 L["Hide raid buffs from buff bar"] = true

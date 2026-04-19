@@ -781,6 +781,14 @@ function DF:UpdateHighlights(frame, forceSelection, forceAggro)
         else
             isAggro = status and status > 0
         end
+        -- Hide if this unit is a tank by role. The tank having aggro is
+        -- the desired state; we only want the highlight to flag when a
+        -- non-tank (dps/healer) pulls threat.
+        if isAggro and db.aggroHideOnTank and unit then
+            if UnitGroupRolesAssigned(unit) == "TANK" then
+                isAggro = false
+            end
+        end
     end
     
     -- Get modes
