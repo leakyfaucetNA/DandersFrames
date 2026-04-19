@@ -525,12 +525,12 @@ function Search:CreateInlineCheckbox(parent, entry)
     -- Check if this is a custom checkbox (no dbKey, uses custom get/set)
     if entry.isCustom or not entry.dbKey then
         -- For custom checkboxes, just show the label with a note to use the settings page
-        local text = container:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        local text = container:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
         text:SetPoint("LEFT", 0, 0)
         text:SetText(entry.label)
         text:SetTextColor(0.8, 0.8, 0.8)
         
-        local note = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local note = container:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         note:SetPoint("LEFT", text, "RIGHT", 10, 0)
         note:SetText("|cff888888(click header to edit)|r")
         
@@ -554,7 +554,7 @@ function Search:CreateInlineCheckbox(parent, entry)
     cb.Check:SetSize(12, 12)
     cb:SetCheckedTexture(cb.Check)
     
-    local text = container:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local text = container:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     text:SetPoint("LEFT", cb, "RIGHT", 8, 0)
     text:SetText(entry.label)
     
@@ -578,7 +578,7 @@ function Search:CreateInlineSlider(parent, entry)
     local container = CreateFrame("Frame", nil, parent)
     container:SetSize(340, 50)
     
-    local lbl = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local lbl = container:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     lbl:SetPoint("TOPLEFT", 0, 0)
     lbl:SetText(entry.label)
     
@@ -603,7 +603,7 @@ function Search:CreateInlineSlider(parent, entry)
     input:SetSize(45, 20)
     CreateBackdrop(input)
     input:SetBackdropColor(0, 0, 0, 0.5)
-    input:SetFontObject(GameFontHighlightSmall)
+    input:SetFontObject(DFFontHighlightSmall)
     input:SetJustifyH("CENTER")
     input:SetAutoFocus(false)
     input:SetTextInsets(2, 2, 0, 0)
@@ -686,7 +686,7 @@ function Search:CreateInlineColorPicker(parent, entry)
     swatch:SetSize(20, 16)
     swatch:SetPoint("RIGHT", -4, 0)
     
-    local txt = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local txt = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     txt:SetPoint("LEFT", 5, 0)
     txt:SetText(entry.label)
     
@@ -755,7 +755,7 @@ function Search:CreateInlineDropdown(parent, entry)
     local container = CreateFrame("Frame", nil, parent)
     container:SetSize(340, 55)
     
-    local lbl = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local lbl = container:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     lbl:SetPoint("TOPLEFT", 0, 0)
     lbl:SetText(entry.label)
     
@@ -765,7 +765,7 @@ function Search:CreateInlineDropdown(parent, entry)
     CreateBackdrop(btn)
     btn:SetBackdropColor(0.1, 0.1, 0.1, 1)
     
-    local btnText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local btnText = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     btnText:SetPoint("LEFT", 8, 0)
     btnText:SetText(values[db[dbKey]] or "Select...")
     
@@ -809,7 +809,7 @@ function Search:CreateInlineDropdown(parent, entry)
         opt:SetPoint("TOPLEFT", 4, yOff)
         opt:SetPoint("TOPRIGHT", -4, yOff)
         
-        local t = opt:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local t = opt:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         t:SetPoint("LEFT", 4, 0)
         t:SetText(v)
         
@@ -871,7 +871,7 @@ function Search:CreateResultWidget(parent, entry, index)
     breadcrumb:SetBackdropColor(0.2, 0.2, 0.2, 0.8)
     breadcrumb:SetBackdropBorderColor(0.35, 0.35, 0.35, 1)
     
-    local breadcrumbText = breadcrumb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local breadcrumbText = breadcrumb:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     breadcrumbText:SetPoint("LEFT", 8, 0)
     
     local fullPath = tabDisplay .. (sectionDisplay ~= "" and ("  >  " .. sectionDisplay) or "")
@@ -1009,11 +1009,11 @@ function Search:CreateSearchBar(parent)
     editbox:SetPoint("LEFT", 22, 0)
     editbox:SetPoint("RIGHT", -24, 0)
     editbox:SetHeight(20)
-    editbox:SetFontObject(GameFontHighlightSmall)
+    editbox:SetFontObject(DFFontHighlightSmall)
     editbox:SetAutoFocus(false)
     editbox:SetTextInsets(2, 2, 0, 0)
     
-    local placeholder = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+    local placeholder = frame:CreateFontString(nil, "OVERLAY", "DFFontDisableSmall")
     placeholder:SetPoint("LEFT", 24, 0)
     placeholder:SetText("Search...")
     placeholder:SetTextColor(0.5, 0.5, 0.5)
@@ -1100,19 +1100,19 @@ function Search:CreateResultsPanel(parent)
     panel:SetBackdropBorderColor(0, 0, 0, 1)
     panel:Hide()
     
-    local header = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    local header = panel:CreateFontString(nil, "OVERLAY", "DFFontNormalLarge")
     header:SetPoint("TOPLEFT", 15, -15)
     header:SetText("Search Results")
     local c = GetThemeColor()
     header:SetTextColor(c.r, c.g, c.b)
     panel.header = header
     
-    local countText = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local countText = panel:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     countText:SetPoint("LEFT", header, "RIGHT", 10, 0)
     countText:SetTextColor(0.6, 0.6, 0.6)
     panel.countText = countText
     
-    local noResults = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local noResults = panel:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     noResults:SetPoint("CENTER", panel, "CENTER", 0, 0)
     noResults:SetText("No settings found.\nTry different keywords.")
     noResults:SetTextColor(0.5, 0.5, 0.5)

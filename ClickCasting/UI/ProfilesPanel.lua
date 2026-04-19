@@ -29,7 +29,7 @@ function CC:CreateProfilesPanelContent()
     rightCol:SetPoint("BOTTOMRIGHT", -10, 10)
     
     -- ===== LEFT COLUMN: Profile List =====
-    local profilesLabel = leftCol:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local profilesLabel = leftCol:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     profilesLabel:SetPoint("TOPLEFT", 0, 0)
     profilesLabel:SetText(L["YOUR PROFILES"])
     profilesLabel:SetTextColor(C.textDim.r, C.textDim.g, C.textDim.b)
@@ -76,7 +76,7 @@ function CC:CreateProfilesPanelContent()
         btn:SetBackdropColor(C.element.r, C.element.g, C.element.b, 1)
         btn:SetBackdropBorderColor(C.border.r, C.border.g, C.border.b, 0.5)
         
-        local btnText = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local btnText = btn:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
         btnText:SetPoint("CENTER")
         btnText:SetText(text)
         btnText:SetTextColor(C.text.r, C.text.g, C.text.b)
@@ -178,7 +178,7 @@ function CC:CreateProfilesPanelContent()
     CC.profileDeleteBtn = deleteBtn
     
     -- Import/Export section
-    local ioLabel = leftCol:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local ioLabel = leftCol:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     ioLabel:SetPoint("TOPLEFT", btnRow2, "BOTTOMLEFT", 0, -12)
     ioLabel:SetText(L["Import/Export"])
     ioLabel:SetTextColor(C.textDim.r, C.textDim.g, C.textDim.b)
@@ -239,7 +239,7 @@ function CC:CreateProfilesPanelContent()
     autoCreateCheck:SetVertexColor(themeColor.r, themeColor.g, themeColor.b)
     autoCreateCb.check = autoCreateCheck
     
-    local autoCreateLabel = leftCol:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local autoCreateLabel = leftCol:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     autoCreateLabel:SetPoint("LEFT", autoCreateCb, "RIGHT", 5, 0)
     autoCreateLabel:SetText(L["Auto-create profiles for loadouts"])
     autoCreateLabel:SetTextColor(C.text.r, C.text.g, C.text.b)
@@ -303,7 +303,7 @@ function CC:CreateProfilesPanelContent()
     mountCheck:SetVertexColor(themeColor.r, themeColor.g, themeColor.b)
     mountCb.check = mountCheck
     
-    local mountLabel = leftCol:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local mountLabel = leftCol:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     mountLabel:SetPoint("LEFT", mountCb, "RIGHT", 6, 0)
     mountLabel:SetText(L["Disable while mounted/flying"])
     mountLabel:SetTextColor(C.text.r, C.text.g, C.text.b)
@@ -361,7 +361,7 @@ function CC:CreateProfilesPanelContent()
     CC.mountCb = mountCb
     
     -- ===== RIGHT COLUMN: Loadout Assignments =====
-    local loadoutLabel = rightCol:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local loadoutLabel = rightCol:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     loadoutLabel:SetPoint("TOPLEFT", 0, 0)
     loadoutLabel:SetText(L["LOADOUT ASSIGNMENTS"])
     loadoutLabel:SetTextColor(C.textDim.r, C.textDim.g, C.textDim.b)
@@ -396,7 +396,7 @@ function CC:CreateProfilesPanelContent()
     end)
     
     -- Auto-link indicator at bottom
-    local autoLinkInfo = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local autoLinkInfo = panel:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     autoLinkInfo:SetPoint("BOTTOMLEFT", 10, 10)
     autoLinkInfo:SetPoint("RIGHT", panel, "RIGHT", -220, 0) -- Limit width so it doesn't overlap right column
     autoLinkInfo:SetJustifyH("LEFT")
@@ -478,12 +478,12 @@ function CC:RefreshProfilesPanel()
         local profile = classData.profiles[profileName]
         local bindCount = profile and profile.bindings and #profile.bindings or 0
         
-        local countText = item:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local countText = item:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         countText:SetPoint("RIGHT", -6, 0)
         countText:SetText(format(L["%d binds"], bindCount))
         countText:SetTextColor(C.textDim.r, C.textDim.g, C.textDim.b)
         
-        local nameText = item:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local nameText = item:CreateFontString(nil, "OVERLAY", "DFFontNormal")
         nameText:SetPoint("LEFT", isActive and 18 or 6, 0)
         nameText:SetPoint("RIGHT", countText, "LEFT", -8, 0)
         nameText:SetJustifyH("LEFT")
@@ -627,7 +627,7 @@ function CC:RefreshLoadoutAssignments()
             icon:SetPoint("LEFT", 4, 0)
             icon:SetTexture(specIcon)
             
-            local specText = specHeader:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            local specText = specHeader:CreateFontString(nil, "OVERLAY", "DFFontNormal")
             specText:SetPoint("LEFT", icon, "RIGHT", 6, 0)
             specText:SetText(specName)
             specText:SetTextColor(themeColor.r, themeColor.g, themeColor.b)
@@ -690,7 +690,7 @@ function CC:CreateLoadoutRow(parent, specIndex, configID, loadoutName, profiles,
         return string.sub(text, 1, maxLen - 2) .. ".."
     end
     
-    local dropText = dropBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local dropText = dropBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     dropText:SetPoint("LEFT", 4, 0)
     dropText:SetPoint("RIGHT", -14, 0)
     dropText:SetJustifyH("LEFT")
@@ -707,7 +707,7 @@ function CC:CreateLoadoutRow(parent, specIndex, configID, loadoutName, profiles,
     arrow:SetVertexColor(C.textDim.r, C.textDim.g, C.textDim.b)
     
     -- Name text (constrained to not overlap button)
-    local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local nameText = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     nameText:SetPoint("LEFT", 0, 0)
     nameText:SetPoint("RIGHT", dropBtn, "LEFT", -4, 0)
     nameText:SetJustifyH("LEFT")
@@ -776,7 +776,7 @@ function CC:CreateLoadoutRow(parent, specIndex, configID, loadoutName, profiles,
             item:SetPoint("TOPLEFT", 2, -2 - (i-1) * itemHeight)
             item:SetPoint("RIGHT", -2, 0)
             
-            local itemText = item:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local itemText = item:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             itemText:SetPoint("LEFT", 6, 0)
             itemText:SetPoint("RIGHT", -6, 0)
             itemText:SetJustifyH("LEFT")

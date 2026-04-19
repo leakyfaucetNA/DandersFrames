@@ -187,9 +187,20 @@ function DF:SetProfile(name)
             classColors = {},
             powerColors = {},
             linkedSections = {},
+            partyEnabled = true,
+            raidEnabled = true,
+            settingsFont = "Friz Quadrata TT",
+            settingsFontOutline = "",
         }
         print("|cff00ff00DandersFrames:|r " .. format(L["Created new profile: %s"], name))
     end
+
+    -- Backfill defaults on older profiles
+    local p = DandersFramesDB_v2.profiles[name]
+    if p.partyEnabled        == nil then p.partyEnabled        = true end
+    if p.raidEnabled         == nil then p.raidEnabled         = true end
+    if p.settingsFont        == nil then p.settingsFont        = "Friz Quadrata TT" end
+    if p.settingsFontOutline == nil then p.settingsFontOutline = "" end
 
     -- Switch to the profile (update both account-wide and per-character)
     DandersFramesDB_v2.currentProfile = name
@@ -204,6 +215,12 @@ function DF:SetProfile(name)
     DF:FullProfileRefresh()
 
     print("|cff00ff00DandersFrames:|r " .. format(L["Switched to profile: %s"], name))
+
+    -- If the new profile has a different enable-flag state, prompt to reload
+    -- so headers can be (re)created. Frames cannot be added/removed at runtime.
+    if DF.PromptReloadIfEnableFlagsChanged then
+        DF:PromptReloadIfEnableFlagsChanged()
+    end
 
     -- Re-evaluate auto-profiles for the new profile after a short delay
     -- to allow secure frame operations to settle
@@ -607,6 +624,8 @@ function DF:ApplyImportedProfile(importData, selectedCategories, selectedFrameTy
             powerColors = DF:DeepCopy(DF.db.powerColors or {}),
             auraBlacklist = DF:DeepCopy(DF.db.auraBlacklist or { buffs = {}, debuffs = {} }),
             linkedSections = {},
+            partyEnabled = DF.db.partyEnabled ~= false,
+            raidEnabled  = DF.db.raidEnabled  ~= false,
         }
 
         -- Switch to the new profile
@@ -674,6 +693,13 @@ function DF:ApplyImportedProfile(importData, selectedCategories, selectedFrameTy
 
     DF:FullProfileRefresh()
     print("|cff00ff00DandersFrames:|r " .. L["Profile imported successfully!"])
+
+    -- If the imported state changed which frame modes are enabled, prompt
+    -- the user to reload so headers can be (re)created.
+    if DF.PromptReloadIfEnableFlagsChanged then
+        DF:PromptReloadIfEnableFlagsChanged()
+    end
+
     return true
 end
 
@@ -701,6 +727,13 @@ function DF:ImportProfile(str)
 
     DF:FullProfileRefresh()
     print("|cff00ff00DandersFrames:|r " .. L["Profile imported successfully!"])
+
+    -- If the imported state changed which frame modes are enabled, prompt
+    -- the user to reload so headers can be (re)created.
+    if DF.PromptReloadIfEnableFlagsChanged then
+        DF:PromptReloadIfEnableFlagsChanged()
+    end
+
     return true
 end
 

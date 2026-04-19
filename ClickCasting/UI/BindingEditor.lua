@@ -77,7 +77,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
     addBindingDialog:SetScript("OnDragStop", addBindingDialog.StopMovingOrSizing)
     
     -- Title
-    local title = addBindingDialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local title = addBindingDialog:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     title:SetPoint("TOPLEFT", 12, -12)
     title:SetText(existingBinding and L["Edit Binding"] or L["Add New Binding"])
     title:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -126,7 +126,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
     local yOffset = -45
     
     -- STEP 1: Key Combination
-    local step1Label = addBindingDialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local step1Label = addBindingDialog:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     step1Label:SetPoint("TOPLEFT", 15, yOffset)
     step1Label:SetText(L["Step 1: Click here with desired key combo"])
     step1Label:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -144,7 +144,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
     keyCaptureBtn:SetBackdropBorderColor(C_BORDER.r, C_BORDER.g, C_BORDER.b, 0.5)
     keyCaptureBtn:RegisterForClicks("AnyDown", "AnyUp")
     
-    local keyText = keyCaptureBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local keyText = keyCaptureBtn:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     keyText:SetPoint("CENTER")
     
     local function UpdateKeyText()
@@ -172,7 +172,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
     
     -- Mac warning label (only shown on Mac)
     if IsMacClient and IsMacClient() then
-        local macWarning = addBindingDialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local macWarning = addBindingDialog:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         macWarning:SetPoint("TOPLEFT", keyCaptureBtn, "BOTTOMLEFT", 0, -2)
         macWarning:SetWidth(390)
         macWarning:SetJustifyH("LEFT")
@@ -184,7 +184,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
     yOffset = yOffset - 45
     
     -- STEP 2: Action Selection (spell list with Target/Menu at top)
-    local step2Label = addBindingDialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local step2Label = addBindingDialog:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     step2Label:SetPoint("TOPLEFT", 15, yOffset)
     step2Label:SetText(L["Step 2: Select Action"])
     step2Label:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -201,7 +201,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
     })
     spellBox:SetBackdropColor(C_ELEMENT.r, C_ELEMENT.g, C_ELEMENT.b, 1)
     spellBox:SetBackdropBorderColor(C_BORDER.r, C_BORDER.g, C_BORDER.b, 0.5)
-    spellBox:SetFont("Fonts\\FRIZQT__.TTF", 11, "")
+    DF.GUI:SetSettingsFont(spellBox, 11, "")
     spellBox:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
     spellBox:SetTextInsets(24, 8, 0, 0)
     spellBox:SetAutoFocus(false)
@@ -215,7 +215,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
     spellSearchIcon:SetVertexColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
     
     -- Placeholder text
-    local placeholder = spellBox:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local placeholder = spellBox:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     placeholder:SetPoint("LEFT", 24, 0)
     placeholder:SetText(L["Search spells..."])
     placeholder:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -245,7 +245,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
     selectionIcon:SetTexture("Interface\\Icons\\INV_Misc_QuestionMark") -- Default question mark
     selectionIcon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     
-    local selectionText = selectionFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local selectionText = selectionFrame:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     selectionText:SetPoint("LEFT", selectionIcon, "RIGHT", 8, 0)
     selectionText:SetText(L["No action selected"])
     selectionText:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -309,7 +309,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
         iconTex:SetTexture(icon)
         iconTex:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         
-        local nameText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local nameText = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         nameText:SetPoint("LEFT", iconTex, "RIGHT", 8, 0)
         nameText:SetText(text)
         
@@ -396,7 +396,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
     yOffset = yOffset - 145
     
     -- STEP 3: Combat Condition
-    local step3Label = addBindingDialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local step3Label = addBindingDialog:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     step3Label:SetPoint("TOPLEFT", 15, yOffset)
     step3Label:SetText(L["Step 3: Combat Condition (optional)"])
     step3Label:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -436,7 +436,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
             edgeSize = 1,
         })
         
-        local label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local label = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         label:SetPoint("CENTER")
         label:SetText(opt.label)
         btn.label = label
@@ -471,7 +471,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
     saveIcon:SetSize(14, 14)
     saveIcon:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\save")
     saveIcon:SetVertexColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
-    local saveLabel = saveBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local saveLabel = saveBtn:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     saveLabel:SetPoint("LEFT", saveIcon, "RIGHT", 4, 0)
     saveLabel:SetText(L["Save"])
     saveLabel:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -535,7 +535,7 @@ function CC:ShowAddBindingDialog(onComplete, existingBinding, existingIndex)
     cancelBtn:SetBackdropColor(C_ELEMENT.r, C_ELEMENT.g, C_ELEMENT.b, 1)
     cancelBtn:SetBackdropBorderColor(C_BORDER.r, C_BORDER.g, C_BORDER.b, 0.5)
     
-    local cancelLabel = cancelBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local cancelLabel = cancelBtn:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     cancelLabel:SetPoint("CENTER")
     cancelLabel:SetText(L["Cancel"])
     cancelLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -706,7 +706,7 @@ function CC:CreateBindingRow(parent, binding, index)
     end
     
     -- Keybind text (aligned with spell name on top line)
-    local keybind = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local keybind = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     keybind:SetPoint("TOPRIGHT", row, "TOPRIGHT", -28, -6)
     keybind:SetJustifyH("RIGHT")
     keybind:SetTextColor(themeColor.r, themeColor.g, themeColor.b)
@@ -718,7 +718,7 @@ function CC:CreateBindingRow(parent, binding, index)
     local displayName = CC:GetActionDisplayString(binding)
     
     -- Spell name (top line, aligned with keybind)
-    local name = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local name = row:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     name:SetPoint("TOPLEFT", icon, "TOPRIGHT", 6, -4)
     name:SetPoint("RIGHT", keybind, "LEFT", -8, 0)
     name:SetJustifyH("LEFT")
@@ -735,7 +735,7 @@ function CC:CreateBindingRow(parent, binding, index)
     local fallbackText = isMacro and nil or GetFallbackDisplayText(fallback)
     local combatSetting = binding.combat or "always"
     
-    local targetingInfo = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local targetingInfo = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     targetingInfo:SetPoint("TOPLEFT", name, "BOTTOMLEFT", 0, -2)
     targetingInfo:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -28, 4)
     targetingInfo:SetJustifyH("LEFT")
@@ -899,7 +899,7 @@ function CC:CreateEditBindingPanel()
     titleBar:SetScript("OnDragStart", function() panel:StartMoving() end)
     titleBar:SetScript("OnDragStop", function() panel:StopMovingOrSizing() end)
     
-    local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    local title = titleBar:CreateFontString(nil, "OVERLAY", "DFFontNormalLarge")
     title:SetPoint("CENTER", titleBar, "CENTER", 0, 0)
     title:SetText(L["Edit Binding"])
     title:SetTextColor(themeColor.r, themeColor.g, themeColor.b)
@@ -936,7 +936,7 @@ function CC:CreateEditBindingPanel()
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     panel.icon = icon
     
-    local spellName = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    local spellName = panel:CreateFontString(nil, "OVERLAY", "DFFontNormalLarge")
     spellName:SetPoint("LEFT", iconFrame, "RIGHT", 10, 0)
     spellName:SetPoint("RIGHT", -12, 0)
     spellName:SetJustifyH("LEFT")
@@ -951,7 +951,7 @@ function CC:CreateEditBindingPanel()
     div1:SetColorTexture(C_BORDER.r, C_BORDER.g, C_BORDER.b, 0.5)
     
     -- Binding section
-    local bindLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local bindLabel = panel:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     bindLabel:SetPoint("TOPLEFT", 12, -90)
     bindLabel:SetText(L["Binding:"])
     bindLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -967,7 +967,7 @@ function CC:CreateEditBindingPanel()
     bindButton:SetBackdropColor(C_ELEMENT.r, C_ELEMENT.g, C_ELEMENT.b, 1)
     bindButton:SetBackdropBorderColor(C_BORDER.r, C_BORDER.g, C_BORDER.b, 1)
     
-    local bindText = bindButton:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local bindText = bindButton:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     bindText:SetPoint("CENTER")
     bindText:SetText(L["Click to bind..."])
     bindText:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -1017,7 +1017,7 @@ function CC:CreateEditBindingPanel()
     clearIcon:SetSize(12, 12)
     clearIcon:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\close")
     clearIcon:SetVertexColor(0.8, 0.5, 0.5)
-    local clearText = clearBindBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local clearText = clearBindBtn:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     clearText:SetPoint("LEFT", clearIcon, "RIGHT", 3, 0)
     clearText:SetText(L["Clear"])
     clearText:SetTextColor(0.8, 0.5, 0.5)
@@ -1037,7 +1037,7 @@ function CC:CreateEditBindingPanel()
     end)
     
     -- Mac warning label (always created, only shown on Mac by default)
-    local macWarning = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local macWarning = panel:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     macWarning:SetPoint("TOPLEFT", bindButton, "BOTTOMLEFT", 0, -2)
     macWarning:SetPoint("RIGHT", clearBindBtn, "RIGHT", 0, 0)
     macWarning:SetJustifyH("LEFT")
@@ -1070,7 +1070,7 @@ function CC:CreateEditBindingPanel()
         check:SetSize(8, 8)
         radio:SetCheckedTexture(check)
         
-        local label = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local label = parent:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         label:SetPoint("LEFT", radio, "RIGHT", 6, 0)
         label:SetText(text)
         label:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -1082,13 +1082,13 @@ function CC:CreateEditBindingPanel()
     end
     
     -- Frames section (checkboxes)
-    local framesLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local framesLabel = panel:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     framesLabel:SetPoint("TOPLEFT", 12, -125)
     framesLabel:SetText(L["Apply to Frames:"])
     framesLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
     
     -- Subtitle explaining what frames options are for
-    local framesSubtitle = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local framesSubtitle = panel:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     framesSubtitle:SetPoint("TOPLEFT", framesLabel, "BOTTOMLEFT", 0, -1)
     framesSubtitle:SetWidth(295)
     framesSubtitle:SetJustifyH("LEFT")
@@ -1120,7 +1120,7 @@ function CC:CreateEditBindingPanel()
         cb.check = check
         
         -- Text label
-        local label = cb:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local label = cb:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         label:SetPoint("LEFT", cb, "RIGHT", 6, 0)
         label:SetText(text)
         cb.text = label
@@ -1216,7 +1216,7 @@ function CC:CreateEditBindingPanel()
     panel.otherFramesCB = otherFramesCB
     
     -- Target Type section (moved up, was below Fallback)
-    local targetLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local targetLabel = panel:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     targetLabel:SetPoint("TOPLEFT", 12, -218)
     targetLabel:SetText(L["Target Type:"])
     targetLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -1255,7 +1255,7 @@ function CC:CreateEditBindingPanel()
     panel.targetRadios = targetRadios
     
     -- Combat/Active section (moved up, was below Target Type)
-    local combatLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local combatLabel = panel:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     combatLabel:SetPoint("TOPLEFT", 12, -302)
     combatLabel:SetText(L["Active:"])
     combatLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -1319,7 +1319,7 @@ function CC:CreateEditBindingPanel()
     advancedArrow:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\chevron_right")
     advancedArrow:SetVertexColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
     
-    local advancedText = advancedToggle:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local advancedText = advancedToggle:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     advancedText:SetPoint("LEFT", advancedArrow, "RIGHT", 4, 0)
     advancedText:SetText(L["Advanced"])
     advancedText:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -1343,14 +1343,14 @@ function CC:CreateEditBindingPanel()
     panel.advancedContent = advancedContent
     
     -- Fallback section (inside advanced content)
-    local fallbackLabel = advancedContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local fallbackLabel = advancedContent:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     fallbackLabel:SetPoint("TOPLEFT", 0, 0)
     fallbackLabel:SetText(L["Targeting Fallback:"])
     fallbackLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
     panel.fallbackLabel = fallbackLabel
     
     -- Subtitle explaining what fallback is for
-    local fallbackSubtitle = advancedContent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local fallbackSubtitle = advancedContent:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     fallbackSubtitle:SetPoint("TOPLEFT", fallbackLabel, "BOTTOMLEFT", 0, -1)
     fallbackSubtitle:SetWidth(280)
     fallbackSubtitle:SetJustifyH("LEFT")
@@ -1387,7 +1387,7 @@ function CC:CreateEditBindingPanel()
     panel.selfCB = selfCB
 
     -- Macro Options section header
-    local macroOptionsLabel = advancedContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local macroOptionsLabel = advancedContent:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     macroOptionsLabel:SetPoint("TOPLEFT", 0, -108)
     macroOptionsLabel:SetText(L["Macro Options:"])
     macroOptionsLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -1403,13 +1403,13 @@ function CC:CreateEditBindingPanel()
     panel.stopSpellTargetCB = stopSpellTargetCB
 
     -- Priority slider (inside advanced content)
-    local priorityLabel = advancedContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local priorityLabel = advancedContent:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     priorityLabel:SetPoint("TOPLEFT", 0, -158)
     priorityLabel:SetText(L["Priority:"])
     priorityLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
     panel.priorityLabel = priorityLabel
     
-    local priorityValue = advancedContent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local priorityValue = advancedContent:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     priorityValue:SetPoint("LEFT", priorityLabel, "RIGHT", 5, 0)
     priorityValue:SetText("5")
     priorityValue:SetTextColor(themeColor.r, themeColor.g, themeColor.b)
@@ -1445,12 +1445,12 @@ function CC:CreateEditBindingPanel()
     end)
     
     -- Priority hint labels (10 = Low on left, 1 = High on right)
-    local lowLabel = advancedContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local lowLabel = advancedContent:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     lowLabel:SetPoint("TOPLEFT", prioritySlider, "BOTTOMLEFT", 0, -2)
     lowLabel:SetText(L["10 = Low"])
     lowLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
     
-    local highLabel = advancedContent:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local highLabel = advancedContent:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     highLabel:SetPoint("TOPRIGHT", prioritySlider, "BOTTOMRIGHT", 0, -2)
     highLabel:SetText(L["1 = High"])
     highLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -1462,7 +1462,7 @@ function CC:CreateEditBindingPanel()
     -- ============================================================
     
     -- Global Keybind heading
-    local globalBindLabel = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local globalBindLabel = panel:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     globalBindLabel:SetPoint("TOPLEFT", 12, -302)  -- Will be repositioned dynamically
     globalBindLabel:SetText(L["Global Keybind:"])
     globalBindLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -1470,7 +1470,7 @@ function CC:CreateEditBindingPanel()
     panel.globalBindLabel = globalBindLabel
     
     -- Description for Global Keybind (below heading)
-    local globalBindDesc = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local globalBindDesc = panel:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     globalBindDesc:SetPoint("TOPLEFT", 12, -318)  -- Will be repositioned dynamically
     globalBindDesc:SetWidth(280)
     globalBindDesc:SetJustifyH("LEFT")
@@ -1536,7 +1536,7 @@ function CC:CreateEditBindingPanel()
     saveIcon:SetSize(14, 14)
     saveIcon:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\save")
     saveIcon:SetVertexColor(1, 1, 1)
-    local saveText = saveBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local saveText = saveBtn:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     saveText:SetPoint("LEFT", saveIcon, "RIGHT", 4, 0)
     saveText:SetText(L["Save"])
     saveText:SetTextColor(1, 1, 1)
@@ -1560,7 +1560,7 @@ function CC:CreateEditBindingPanel()
     })
     cancelBtn:SetBackdropColor(C_ELEMENT.r, C_ELEMENT.g, C_ELEMENT.b, 1)
     cancelBtn:SetBackdropBorderColor(C_BORDER.r, C_BORDER.g, C_BORDER.b, 1)
-    local cancelText = cancelBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local cancelText = cancelBtn:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     cancelText:SetPoint("CENTER")
     cancelText:SetText(L["Cancel"])
     cancelText:SetTextColor(0.8, 0.8, 0.8)
@@ -1590,7 +1590,7 @@ function CC:CreateEditBindingPanel()
     deleteIcon:SetSize(14, 14)
     deleteIcon:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\delete")
     deleteIcon:SetVertexColor(1, 0.5, 0.5)
-    local deleteText = deleteBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local deleteText = deleteBtn:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     deleteText:SetPoint("LEFT", deleteIcon, "RIGHT", 4, 0)
     deleteText:SetText(L["Delete"])
     deleteText:SetTextColor(1, 0.5, 0.5)
@@ -2520,7 +2520,7 @@ function CC:CreateSpellCell(parent, spellData, index)
     icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
     
     -- Name (use current display name, can wrap to 2 lines)
-    local name = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local name = cell:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     name:SetPoint("TOP", icon, "BOTTOM", 0, -2)
     name:SetPoint("BOTTOM", 0, 3)
     name:SetWidth(cellWidth - 4)
@@ -2833,7 +2833,7 @@ function CC:RefreshSpellGrid(skipScrollReset)
         header:SetSize(containerWidth, 24)
         header:SetPoint("TOPLEFT", 0, -yPos)
         
-        local label = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local label = header:CreateFontString(nil, "OVERLAY", "DFFontNormal")
         label:SetPoint("LEFT", 5, 0)
         label:SetText(text)
         label:SetTextColor(0.2, 0.8, 0.4, 1)  -- Theme color
@@ -3081,7 +3081,7 @@ function CC:RefreshMacroGrid(skipScrollReset)
         headerFrame:SetSize(containerWidth, 20)
         headerFrame:SetPoint("TOPLEFT", 0, -y)
         
-        local header = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local header = headerFrame:CreateFontString(nil, "OVERLAY", "DFFontNormal")
         header:SetPoint("LEFT", 4, 0)
         header:SetText(text)
         header:SetTextColor(themeColor.r, themeColor.g, themeColor.b)
@@ -3098,7 +3098,7 @@ function CC:RefreshMacroGrid(skipScrollReset)
     
     -- Show empty state if no macros
     if #filteredMacros == 0 then
-        local emptyMsg = self.scrollContent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local emptyMsg = self.scrollContent:CreateFontString(nil, "OVERLAY", "DFFontNormal")
         emptyMsg:SetPoint("CENTER", 0, 0)
         if #self:GetAllMacros() == 0 then
             emptyMsg:SetText(L["No macros yet.\nClick '+ New' to create one or 'Import' to import from WoW."])
@@ -3216,7 +3216,7 @@ function CC:RefreshItemsGrid(skipScrollReset)
         headerFrame:SetSize(containerWidth, 22)
         headerFrame:SetPoint("TOPLEFT", 0, -y)
         
-        local headerText = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local headerText = headerFrame:CreateFontString(nil, "OVERLAY", "DFFontNormal")
         headerText:SetPoint("LEFT", 4, 0)
         headerText:SetText(text)
         headerText:SetTextColor(themeColor.r, themeColor.g, themeColor.b)
@@ -3334,7 +3334,7 @@ function CC:RefreshItemsGrid(skipScrollReset)
     dropZone:SetBackdropColor(C_ELEMENT.r, C_ELEMENT.g, C_ELEMENT.b, 0.5)
     dropZone:SetBackdropBorderColor(themeColor.r, themeColor.g, themeColor.b, 0.3)
     
-    local dropText = dropZone:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local dropText = dropZone:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     dropText:SetPoint("CENTER")
     dropText:SetText("+ Drop Item")
     dropText:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -3453,7 +3453,7 @@ function CC:CreateItemCell(parent, itemData, index)
     end
     
     -- Item name
-    local nameText = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local nameText = cell:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     nameText:SetPoint("TOP", icon, "BOTTOM", 0, -2)
     nameText:SetPoint("BOTTOM", 0, 3)
     nameText:SetWidth(cellWidth - 4)
@@ -3471,7 +3471,7 @@ function CC:CreateItemCell(parent, itemData, index)
     
     -- On-Use indicator
     if itemInfo and itemInfo.hasOnUse then
-        local onUseBadge = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local onUseBadge = cell:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         onUseBadge:SetPoint("TOPLEFT", 4, -4)
         onUseBadge:SetText(L["USE"])
         onUseBadge:SetTextColor(themeColor.r, themeColor.g, themeColor.b)
@@ -3565,13 +3565,13 @@ function CC:CreateItemListRow(parent, itemData, index)
     end
     
     -- Slot name
-    local slotText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local slotText = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     slotText:SetPoint("LEFT", icon, "RIGHT", 8, 0)
     slotText:SetText(itemData.slotName)
     slotText:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
     
     -- Item name
-    local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local nameText = row:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     nameText:SetPoint("LEFT", slotText, "RIGHT", 8, 0)
     if itemInfo and itemInfo.name then
         nameText:SetText(itemInfo.name)
@@ -3583,7 +3583,7 @@ function CC:CreateItemListRow(parent, itemData, index)
     
     -- On-Use badge
     if itemInfo and itemInfo.hasOnUse then
-        local onUseBadge = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local onUseBadge = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         onUseBadge:SetPoint("LEFT", nameText, "RIGHT", 8, 0)
         onUseBadge:SetText("[USE]")
         onUseBadge:SetTextColor(themeColor.r, themeColor.g, themeColor.b)
@@ -3678,7 +3678,7 @@ function CC:CreateConsumableCell(parent, itemData, index)
     end
     
     -- Item name
-    local nameText = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local nameText = cell:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     nameText:SetPoint("TOP", icon, "BOTTOM", 0, -2)
     nameText:SetPoint("BOTTOM", 0, 3)
     nameText:SetWidth(cellWidth - 4)
@@ -3696,7 +3696,7 @@ function CC:CreateConsumableCell(parent, itemData, index)
     -- Item count
     local count = self:GetItemCount(itemData.itemId)
     if count > 0 then
-        local countText = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local countText = cell:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         countText:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", -2, 2)
         countText:SetText(count)
         countText:SetTextColor(1, 1, 1)
@@ -3804,7 +3804,7 @@ function CC:CreateConsumableListRow(parent, itemData, index)
     end
     
     -- Item name
-    local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local nameText = row:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     nameText:SetPoint("LEFT", icon, "RIGHT", 8, 0)
     if itemInfo and itemInfo.name then
         nameText:SetText(itemInfo.name)
@@ -3816,7 +3816,7 @@ function CC:CreateConsumableListRow(parent, itemData, index)
     -- Item count
     local count = self:GetItemCount(itemData.itemId)
     if count > 0 then
-        local countText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local countText = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         countText:SetPoint("LEFT", nameText, "RIGHT", 8, 0)
         countText:SetText("(" .. count .. ")")
         countText:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -3843,7 +3843,7 @@ function CC:CreateConsumableListRow(parent, itemData, index)
     -- Binding display
     local bindings = self:GetBindingsForConsumable(itemData.itemId)
     if #bindings > 0 then
-        local bindText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local bindText = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         bindText:SetPoint("RIGHT", deleteBtn, "LEFT", -8, 0)
         bindText:SetText(self:GetBindingDisplayText(bindings[1]))
         bindText:SetTextColor(themeColor.r, themeColor.g, themeColor.b)
@@ -3992,7 +3992,7 @@ function CC:CreateMacroCell(parent, macroData, index)
     end
     
     -- Source badge (Cus/Char/Gen)
-    local sourceBadge = cell:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local sourceBadge = cell:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     sourceBadge:SetPoint("TOPRIGHT", -3, -3)
     if macroData.source == "global_import" then
         sourceBadge:SetText("[Gen]")
@@ -4008,7 +4008,7 @@ function CC:CreateMacroCell(parent, macroData, index)
     -- Out of sync indicator for imports
     if macroData.source == "global_import" or macroData.source == "char_import" then
         if CC:IsMacroOutOfSync(macroData.id) then
-            local syncIcon = cell:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            local syncIcon = cell:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
             syncIcon:SetPoint("TOPLEFT", 3, -3)
             syncIcon:SetText("!")
             syncIcon:SetTextColor(1, 0.8, 0)
@@ -4016,7 +4016,7 @@ function CC:CreateMacroCell(parent, macroData, index)
     end
     
     -- Name
-    local name = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local name = cell:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     name:SetPoint("TOP", icon, "BOTTOM", 0, -2)
     name:SetPoint("BOTTOM", 0, 3)
     name:SetWidth(cellWidth - 4)
@@ -4131,7 +4131,7 @@ function CC:CreateMacroListRow(parent, macroData, index)
     end
     
     -- Source badge (Cus/Char/Gen)
-    local sourceBadge = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local sourceBadge = row:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     sourceBadge:SetPoint("LEFT", icon, "RIGHT", 6, 0)
     if macroData.source == "global_import" then
         sourceBadge:SetText("[Gen]")
@@ -4145,7 +4145,7 @@ function CC:CreateMacroListRow(parent, macroData, index)
     end
     
     -- Name
-    local name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local name = row:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     name:SetPoint("LEFT", sourceBadge, "RIGHT", 6, 0)
     name:SetText(macroData.name)
     name:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -4161,7 +4161,7 @@ function CC:CreateMacroListRow(parent, macroData, index)
     
     -- Sync warning for imports
     if (macroData.source == "global_import" or macroData.source == "char_import") and CC:IsMacroOutOfSync(macroData.id) then
-        local syncIcon = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local syncIcon = row:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
         syncIcon:SetPoint("RIGHT", -8, 0)
         syncIcon:SetText("⚠")
         syncIcon:SetTextColor(1, 0.8, 0)
@@ -4299,7 +4299,7 @@ function CC:CreateSpellListRow(parent, spellData, index, isSpecialAction, action
     end
     
     -- Name (use current display name)
-    local name = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local name = row:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     name:SetPoint("LEFT", icon, "RIGHT", 8, 0)
     name:SetText(displayName or spellData.name)
     if isSpecialAction then
@@ -4433,7 +4433,7 @@ function CC:CreateSpecialActionCell(parent, actionType, label, iconPath)
     icon:SetTexture(iconPath)
     
     -- Name
-    local name = cell:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local name = cell:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     name:SetPoint("TOP", icon, "BOTTOM", 0, -2)
     name:SetPoint("BOTTOM", 0, 3)
     name:SetWidth(cellWidth - 4)

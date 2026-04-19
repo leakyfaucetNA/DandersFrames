@@ -252,12 +252,12 @@ local function ShowBuffCoexistPopup(onConfirm, onCancel)
         stripe:SetPoint("TOPRIGHT", -1, -1)
         f._stripe = stripe
 
-        local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local title = f:CreateFontString(nil, "OVERLAY", "DFFontNormal")
         title:SetPoint("TOP", 0, -12)
         title:SetText(L["Aura Designer"])
         title:SetTextColor(tc.r, tc.g, tc.b)
 
-        local desc = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local desc = f:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         desc:SetPoint("TOP", title, "BOTTOM", 0, -6)
         desc:SetWidth(390)
         desc:SetText(L["Would you like to keep standard buff icons alongside\nAura Designer, or let it fully replace them?"])
@@ -269,7 +269,7 @@ local function ShowBuffCoexistPopup(onConfirm, onCancel)
             btn:SetSize(170, 28)
             btn:SetPoint("BOTTOM", parent, "BOTTOM", xOff, 14)
             ApplyBackdrop(btn, C_ELEMENT, C_BORDER)
-            btn.text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            btn.text = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             btn.text:SetPoint("CENTER")
             btn.text:SetText(text)
             btn:SetScript("OnEnter", function(self)
@@ -537,14 +537,14 @@ local TYPE_DEFAULTS = {
         size = 24, scale = 1.0, alpha = 1.0,
         borderEnabled = true, borderThickness = 1, borderInset = 1,
         hideSwipe = false, hideIcon = false,
-        showDuration = true, durationFont = "Fonts\\FRIZQT__.TTF",
+        showDuration = true, durationFont = "Friz Quadrata TT",
         durationScale = 1.0, durationOutline = "OUTLINE",
         durationAnchor = "CENTER", durationX = 0, durationY = 0,
         durationColorByTime = true,
         durationColor = {r = 1, g = 1, b = 1, a = 1},
         durationHideAboveEnabled = false, durationHideAboveThreshold = 10,
         showStacks = true, stackMinimum = 2,
-        stackFont = "Fonts\\FRIZQT__.TTF", stackScale = 1.0,
+        stackFont = "Friz Quadrata TT", stackScale = 1.0,
         stackOutline = "OUTLINE", stackAnchor = "BOTTOMRIGHT",
         stackX = 0, stackY = 0,
         stackColor = {r = 1, g = 1, b = 1, a = 1},
@@ -561,14 +561,14 @@ local TYPE_DEFAULTS = {
         color = {r = 1, g = 1, b = 1, a = 1},
         showBorder = true, borderThickness = 1, borderInset = 1,
         hideSwipe = false, hideIcon = false,
-        showDuration = true, durationFont = "Fonts\\FRIZQT__.TTF",
+        showDuration = true, durationFont = "Friz Quadrata TT",
         durationScale = 1.0, durationOutline = "OUTLINE",
         durationAnchor = "CENTER", durationX = 0, durationY = 0,
         durationColorByTime = true,
         durationColor = {r = 1, g = 1, b = 1, a = 1},
         durationHideAboveEnabled = false, durationHideAboveThreshold = 10,
         showStacks = true, stackMinimum = 2,
-        stackFont = "Fonts\\FRIZQT__.TTF", stackScale = 1.0,
+        stackFont = "Friz Quadrata TT", stackScale = 1.0,
         stackOutline = "OUTLINE", stackAnchor = "BOTTOMRIGHT",
         stackX = 0, stackY = 0,
         stackColor = {r = 1, g = 1, b = 1, a = 1},
@@ -592,7 +592,7 @@ local TYPE_DEFAULTS = {
         barColorByTime = false,
         expiringEnabled = false, expiringThreshold = 5,
         expiringColor = {r = 1, g = 0.2, b = 0.2, a = 1},
-        showDuration = true, durationFont = "Fonts\\FRIZQT__.TTF",
+        showDuration = true, durationFont = "Friz Quadrata TT",
         durationScale = 1.0, durationOutline = "OUTLINE",
         durationAnchor = "CENTER", durationX = 0, durationY = 0,
         durationColorByTime = true,
@@ -853,6 +853,94 @@ local function CreateAuraProxy(auraName)
             if RefreshPreviewLightweight then RefreshPreviewLightweight() end
         end,
     })
+end
+
+-- ============================================================
+-- WARNING BADGE
+-- Some auras have underlying API limitations that mean multiple
+-- spells collapse into a single indicator. Entries in Config.lua
+-- with a `warningKey` get a small yellow triangle overlay on their
+-- spell icon and collapsible header, with a tooltip explaining why.
+-- ============================================================
+
+local WARNING_TEXTURE = "Interface\\AddOns\\DandersFrames\\Media\\Icons\\warning.tga"
+
+-- Resolve a warningKey to localized tooltip text. Keys are defined
+-- here rather than Config.lua so they can go through L[] without
+-- load-order concerns.
+local function GetWarningText(warningKey)
+    if not warningKey then return nil end
+    local L = DF.L or setmetatable({}, { __index = function(_, k) return k end })
+    if warningKey == "HolyArmamentsMerge" then
+        return L["Holy Bulwark and Sacred Weapon share the same aura signature and cannot be tracked separately. Both buffs will trigger this single indicator."]
+    end
+    return nil
+end
+
+-- Look up the warningKey for a given aura name in the current spec.
+local function GetAuraWarningKey(specKey, auraName)
+    local specList = DF.AuraDesigner.TrackableAuras and DF.AuraDesigner.TrackableAuras[specKey]
+    if not specList then return nil end
+    for _, entry in ipairs(specList) do
+        if entry.name == auraName then return entry.warningKey end
+    end
+    return nil
+end
+
+-- Attach (or refresh) a warning triangle badge on the given region.
+-- host:     parent Frame the badge is attached to (must be a Frame).
+-- warnKey:  config warning key; nil hides the badge.
+-- opts:     optional table with:
+--             point         -- default "TOPRIGHT"
+--             relativeTo    -- default host
+--             relativePoint -- default "TOPRIGHT"
+--             offsetX/Y     -- default 3, 3
+--             size          -- default 16
+--             color         -- { r, g, b } default red { 1.0, 0.25, 0.25 }
+local function AttachWarningBadge(host, warnKey, opts)
+    if not host then return end
+    local badge = host.dfWarningBadge
+    if not warnKey then
+        if badge then badge:Hide() end
+        return
+    end
+    local tooltipText = GetWarningText(warnKey)
+    if not tooltipText then
+        if badge then badge:Hide() end
+        return
+    end
+
+    if not badge then
+        badge = CreateFrame("Frame", nil, host)
+        badge:SetFrameLevel(host:GetFrameLevel() + 5)
+        local tex = badge:CreateTexture(nil, "OVERLAY")
+        tex:SetAllPoints(badge)
+        tex:SetTexture(WARNING_TEXTURE)
+        badge.texture = tex
+        badge:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(self.tooltipText or "", 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        badge:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        host.dfWarningBadge = badge
+    end
+
+    opts = opts or {}
+    local size = opts.size or 16
+    local color = opts.color or { 1.0, 0.25, 0.25 }
+    badge:SetSize(size, size)
+    badge:ClearAllPoints()
+    badge:SetPoint(
+        opts.point or "TOPRIGHT",
+        opts.relativeTo or host,
+        opts.relativePoint or "TOPRIGHT",
+        opts.offsetX or 3,
+        opts.offsetY or 3
+    )
+    badge.texture:SetVertexColor(color[1], color[2], color[3])
+    badge.tooltipText = tooltipText
+    badge:Show()
 end
 
 -- Get spell icon texture for an aura
@@ -1340,7 +1428,7 @@ local function CreateDragGhost()
     dragGhost.icon = icon
 
     -- Name label under ghost
-    local label = dragGhost:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local label = dragGhost:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     label:SetPoint("TOP", dragGhost, "BOTTOM", 0, -2)
     label:SetTextColor(1, 1, 1, 0.8)
     dragGhost.label = label
@@ -1745,6 +1833,8 @@ local function RefreshPlacedIndicators()
                         end)
                         icon:RegisterForDrag("LeftButton")
                         icon:SetScript("OnDragStart", function()
+                            -- Don't drag grouped indicators (position managed by layout group)
+                            if GetIndicatorLayoutGroup(capturedAura, capturedID) then return end
                             StartMoveDrag(capturedAura, capturedID, spec)
                         end)
                         tinsert(placedIndicators, icon)
@@ -1785,6 +1875,8 @@ local function RefreshPlacedIndicators()
                         end)
                         sq:RegisterForDrag("LeftButton")
                         sq:SetScript("OnDragStart", function()
+                            -- Don't drag grouped indicators (position managed by layout group)
+                            if GetIndicatorLayoutGroup(capturedAura, capturedID) then return end
                             StartMoveDrag(capturedAura, capturedID, spec)
                         end)
                         tinsert(placedIndicators, sq)
@@ -1825,6 +1917,8 @@ local function RefreshPlacedIndicators()
                         end)
                         bar:RegisterForDrag("LeftButton")
                         bar:SetScript("OnDragStart", function()
+                            -- Don't drag grouped indicators (position managed by layout group)
+                            if GetIndicatorLayoutGroup(capturedAura, capturedID) then return end
                             StartMoveDrag(capturedAura, capturedID, spec)
                         end)
                         tinsert(placedIndicators, bar)
@@ -2145,7 +2239,7 @@ local function CreateExpiringThresholdRow(parent, proxy, width)
     modeBtn:SetPoint("BOTTOMRIGHT", slider, "TOPRIGHT", -10, 2)
 
     local modeText = modeBtn:CreateFontString(nil, "OVERLAY")
-    modeText:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+    GUI:SetSettingsFont(modeText, 9, "")
     modeText:SetPoint("CENTER", 0, 0)
     modeText:SetText(isSeconds and L["Seconds"] or L["Percent"])
     modeText:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -2198,7 +2292,7 @@ local function CreateExpiringDurationPriorityRow(parent, auraName, typeKey, widt
     durBtn:SetPoint("TOPLEFT", 0, 0)
 
     local durText = durBtn:CreateFontString(nil, "OVERLAY")
-    durText:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+    GUI:SetSettingsFont(durText, 9, "")
     durText:SetPoint("CENTER", 0, 0)
     durText:SetText(isHighest and L["Track Highest Duration"] or L["Track Lowest Duration"])
     durText:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -2257,7 +2351,7 @@ local function CreateExpiringDurationPriorityRow(parent, auraName, typeKey, widt
         end
         if #secretNames > 0 then
             local warnText = container:CreateFontString(nil, "OVERLAY")
-            warnText:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+            GUI:SetSettingsFont(warnText, 8, "")
             warnText:SetPoint("TOPLEFT", 0, -totalH)
             warnText:SetWidth(width or 248)
             warnText:SetJustifyH("LEFT")
@@ -2308,7 +2402,7 @@ local function BuildTypeContent(parent, typeKey, auraName, width, optProxy, yOff
         copyContainer:SetHeight(36)
 
         local copyLabel = copyContainer:CreateFontString(nil, "OVERLAY")
-        copyLabel:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+        GUI:SetSettingsFont(copyLabel, 8, "")
         copyLabel:SetPoint("TOPLEFT", 1, -1)
         copyLabel:SetText(L["COPY APPEARANCE FROM"])
         copyLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -2322,7 +2416,7 @@ local function BuildTypeContent(parent, typeKey, auraName, width, optProxy, yOff
             {r = C_BORDER.r, g = C_BORDER.g, b = C_BORDER.b, a = 0.6})
 
         local copyBtnText = copyBtn:CreateFontString(nil, "OVERLAY")
-        copyBtnText:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+        GUI:SetSettingsFont(copyBtnText, 9, "")
         copyBtnText:SetPoint("LEFT", 6, 0)
         copyBtnText:SetText(L["Select indicator..."])
         copyBtnText:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -2409,7 +2503,7 @@ local function BuildTypeContent(parent, typeKey, auraName, width, optProxy, yOff
                 btn:SetPoint("RIGHT", drop, "RIGHT", -4, 0)
 
                 local lbl = btn:CreateFontString(nil, "OVERLAY")
-                lbl:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+                GUI:SetSettingsFont(lbl, 9, "")
                 lbl:SetPoint("LEFT", 6, 0)
                 lbl:SetText(src.displayName)
                 lbl:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -2446,7 +2540,7 @@ local function BuildTypeContent(parent, typeKey, auraName, width, optProxy, yOff
         -- Position
         AddGroup(L["Position"], function(g)
             if layoutGroup then
-                local groupNote = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                local groupNote = parent:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
                 groupNote:SetTextColor(0.91, 0.66, 0.25, 0.8)
                 groupNote:SetText(format(L["Position managed by: %s"], layoutGroup.name or L["Layout Group"]))
                 g:AddWidget(groupNote, 18)
@@ -2527,7 +2621,7 @@ local function BuildTypeContent(parent, typeKey, auraName, width, optProxy, yOff
         -- Position
         AddGroup(L["Position"], function(g)
             if layoutGroup then
-                local groupNote = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                local groupNote = parent:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
                 groupNote:SetTextColor(0.91, 0.66, 0.25, 0.8)
                 groupNote:SetText(format(L["Position managed by: %s"], layoutGroup.name or L["Layout Group"]))
                 g:AddWidget(groupNote, 18)
@@ -2597,7 +2691,7 @@ local function BuildTypeContent(parent, typeKey, auraName, width, optProxy, yOff
         -- Position
         AddGroup(L["Position"], function(g)
             if layoutGroup then
-                local groupNote = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                local groupNote = parent:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
                 groupNote:SetTextColor(0.91, 0.66, 0.25, 0.8)
                 groupNote:SetText(format(L["Position managed by: %s"], layoutGroup.name or L["Layout Group"]))
                 g:AddWidget(groupNote, 18)
@@ -2863,7 +2957,7 @@ local function BuildTypeContent(parent, typeKey, auraName, width, optProxy, yOff
             thModeBtn:SetPoint("BOTTOMRIGHT", thSlider, "TOPRIGHT", -10, 2)
 
             local thModeText = thModeBtn:CreateFontString(nil, "OVERLAY")
-            thModeText:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+            GUI:SetSettingsFont(thModeText, 9, "")
             thModeText:SetPoint("CENTER", 0, 0)
             thModeText:SetText(isSeconds and L["Seconds"] or L["Percent"])
             thModeText:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -2910,12 +3004,12 @@ end
 local GLOBAL_DEFAULTS_FALLBACK = {
     iconSize = 24, iconScale = 1.0,
     showDuration = true, showStacks = true,
-    durationFont = "Fonts\\FRIZQT__.TTF", durationScale = 1.0,
+    durationFont = "Friz Quadrata TT", durationScale = 1.0,
     durationOutline = "OUTLINE", durationAnchor = "CENTER",
     durationX = 0, durationY = 0, durationColorByTime = false,
     durationColor = {r = 1, g = 1, b = 1, a = 1},
     durationHideAboveEnabled = false, durationHideAboveThreshold = 10,
-    stackFont = "Fonts\\FRIZQT__.TTF", stackScale = 1.0,
+    stackFont = "Friz Quadrata TT", stackScale = 1.0,
     stackOutline = "OUTLINE", stackAnchor = "BOTTOMRIGHT",
     stackX = 0, stackY = 0,
     stackColor = {r = 1, g = 1, b = 1, a = 1},
@@ -3007,7 +3101,7 @@ local function BuildGlobalView(parent)
     AddGroup(L["Import from Buffs Tab"], function(g)
         local descFrame = CreateFrame("Frame", nil, parent)
         descFrame:SetHeight(36)
-        local descText = descFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local descText = descFrame:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         descText:SetPoint("TOPLEFT", 0, 0)
         descText:SetPoint("RIGHT", descFrame, "RIGHT", 0, 0)
         descText:SetJustifyH("LEFT")
@@ -3028,7 +3122,7 @@ local function BuildGlobalView(parent)
             local isCompat = item[1]
             local row = CreateFrame("Frame", nil, parent)
             row:SetHeight(16)
-            local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local lbl = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             lbl:SetPoint("TOPLEFT", 8, 0)
             if isCompat then
                 lbl:SetText("|TInterface\\AddOns\\DandersFrames\\Media\\Icons\\check:12:12|t  " .. item[2])
@@ -3043,7 +3137,7 @@ local function BuildGlobalView(parent)
         local importBtn = CreateFrame("Button", nil, parent, "BackdropTemplate")
         importBtn:SetHeight(26)
         ApplyBackdrop(importBtn, C_ELEMENT, C_BORDER)
-        local importBtnText = importBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local importBtnText = importBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         importBtnText:SetPoint("CENTER", 0, 0)
         importBtnText:SetText(L["Import Buffs Tab Defaults"])
         importBtnText:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -3083,7 +3177,7 @@ local function BuildGlobalView(parent)
         local copyBtn = CreateFrame("Button", nil, parent, "BackdropTemplate")
         copyBtn:SetHeight(26)
         ApplyBackdrop(copyBtn, C_ELEMENT, C_BORDER)
-        local copyText = copyBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local copyText = copyBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         copyText:SetPoint("CENTER", 0, 0)
         copyText:SetText(format(L["Copy Settings to %s"], targetLabel))
         copyText:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -3110,7 +3204,7 @@ local function BuildGlobalView(parent)
         local resetBtn = CreateFrame("Button", nil, parent, "BackdropTemplate")
         resetBtn:SetHeight(26)
         ApplyBackdrop(resetBtn, {r = 0.3, g = 0.12, b = 0.12, a = 1}, {r = 0.5, g = 0.2, b = 0.2, a = 1})
-        local resetText = resetBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local resetText = resetBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         resetText:SetPoint("CENTER", 0, 0)
         resetText:SetText(L["Reset All Aura Configs"])
         resetText:SetTextColor(1, 0.7, 0.7)
@@ -3183,17 +3277,17 @@ local function CreateEnableBanner(parent)
         end
     end)
 
-    local cbLabel = banner:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local cbLabel = banner:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     cbLabel:SetPoint("LEFT", cb, "RIGHT", 8, 2)
     cbLabel:SetText(L["Enable Aura Designer"])
     cbLabel:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
 
-    local cbSubLabel = banner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local cbSubLabel = banner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     cbSubLabel:SetPoint("TOPLEFT", cbLabel, "BOTTOMLEFT", 0, -1)
     cbSubLabel:SetText(L["Custom buff and frame effect indicators"])
     cbSubLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
 
-    local specLabel = banner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local specLabel = banner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     specLabel:SetPoint("RIGHT", banner, "RIGHT", -145, 0)
     specLabel:SetText(L["Spec:"])
     specLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -3203,7 +3297,7 @@ local function CreateEnableBanner(parent)
     specBtn:SetPoint("LEFT", specLabel, "RIGHT", 4, 0)
     ApplyBackdrop(specBtn, C_ELEMENT, C_BORDER)
 
-    specBtn.text = specBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    specBtn.text = specBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     specBtn.text:SetPoint("LEFT", 6, 0)
     specBtn.text:SetPoint("RIGHT", -16, 0)
     specBtn.text:SetJustifyH("LEFT")
@@ -3268,7 +3362,7 @@ local function CreateEnableBanner(parent)
             btn:SetPoint("TOPLEFT", 4, yOffset)
             btn:SetPoint("TOPRIGHT", -4, yOffset)
 
-            local label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local label = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             label:SetPoint("LEFT", 4, 0)
             label:SetText(opt[2])
 
@@ -3326,14 +3420,16 @@ local function CreateEnableBanner(parent)
     muteBorder:SetPoint("BOTTOMRIGHT", 1, -1)
     muteBorder:SetColorTexture(C_BORDER.r, C_BORDER.g, C_BORDER.b, 1)
 
-    local muteCheck = muteCb:CreateTexture(nil, "ARTWORK")
-    muteCheck:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\check")
+    -- Match GUI:CreateCheckbox visual: solid themed square, not a tick icon.
+    local muteCheck = muteCb:CreateTexture(nil, "OVERLAY")
+    muteCheck:SetTexture("Interface\\Buttons\\WHITE8x8")
     muteCheck:SetVertexColor(tc.r, tc.g, tc.b)
     muteCheck:SetPoint("CENTER")
     muteCheck:SetSize(10, 10)
     muteCb:SetCheckedTexture(muteCheck)
 
-    -- soundEnabled = true means NOT muted, so checked = not muted
+    -- soundEnabled = true/nil means NOT muted, so checked = not muted.
+    -- nil (older profiles without this field) is treated as enabled by default.
     muteCb:SetChecked(adDB and adDB.soundEnabled ~= false)
     muteCb:SetScript("OnClick", function(self)
         local adDB = GetAuraDesignerDB()
@@ -3343,7 +3439,7 @@ local function CreateEnableBanner(parent)
         end
     end)
 
-    local muteLabel = banner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local muteLabel = banner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     muteLabel:SetPoint("RIGHT", muteCb, "LEFT", -4, 0)
     muteLabel:SetText(L["Sound Alerts"])
     muteLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -3389,7 +3485,7 @@ local function CreateFramePreview(parent, yOffset, rightPanelRef)
     ApplyBackdrop(container, {r = 0.12, g = 0.12, b = 0.12, a = 1}, C_BORDER)
 
     -- "Frame Preview" label
-    local previewLabel = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local previewLabel = container:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     previewLabel:SetPoint("TOPLEFT", 8, -4)
     previewLabel:SetText(L["FRAME PREVIEW"])
     previewLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -3589,7 +3685,7 @@ local function CreateFramePreview(parent, yOffset, rightPanelRef)
         badge:SetPoint("BOTTOMLEFT", container, "BOTTOMLEFT", 8, rowBottomOffset)
         ApplyBackdrop(badge, C_ELEMENT, C_BORDER)
 
-        local keyText = badge:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local keyText = badge:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         keyText:SetPoint("CENTER", 0, 0)
         keyText:SetText(row.key)
         keyText:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -3597,7 +3693,7 @@ local function CreateFramePreview(parent, yOffset, rightPanelRef)
         badge:SetWidth(max(keyWidth + 10, 20))
 
         -- Description text (word-wrapped within container bounds)
-        local descText = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local descText = container:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         descText:SetPoint("LEFT", badge, "RIGHT", 5, 0)
         descText:SetPoint("RIGHT", container, "RIGHT", -8, 0)
         descText:SetWordWrap(true)
@@ -3626,7 +3722,7 @@ local function CreateFramePreview(parent, yOffset, rightPanelRef)
 
     -- Drag-state hint text (shows contextual guidance during drag operations)
     dragHintText = container:CreateFontString(nil, "OVERLAY")
-    dragHintText:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+    GUI:SetSettingsFont(dragHintText, 9, "OUTLINE")
     dragHintText:SetPoint("TOP", mockFrame, "BOTTOM", 0, -6)
     dragHintText:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b, 0.8)
     dragHintText:SetText("")
@@ -3787,9 +3883,15 @@ local function CreateSpellCard(grid, auraInfo, spec, x, y, CARD_SIZE, isSecret)
     end
     if alreadyUsed then icon:SetAlpha(0.35) end
 
+    -- Warning badge for auras with API-level tracking limitations
+    AttachWarningBadge(card, auraInfo.warningKey, {
+        relativeTo = icon,
+        size = 18,
+    })
+
     -- Letter fallback
     if not iconTex then
-        local letter = card:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local letter = card:CreateFontString(nil, "OVERLAY", "DFFontNormal")
         letter:SetPoint("CENTER", icon, "CENTER", 0, 0)
         letter:SetText(auraInfo.display:sub(1, 1))
         letter:SetTextColor(auraInfo.color[1], auraInfo.color[2], auraInfo.color[3])
@@ -3798,7 +3900,7 @@ local function CreateSpellCard(grid, auraInfo, spec, x, y, CARD_SIZE, isSecret)
 
     -- Spell name
     local name = card:CreateFontString(nil, "OVERLAY")
-    name:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
+    GUI:SetSettingsFont(name, 8, "OUTLINE")
     name:SetPoint("BOTTOM", 0, 4)
     name:SetWidth(CARD_SIZE - 6)
     name:SetMaxLines(2)
@@ -3811,7 +3913,7 @@ local function CreateSpellCard(grid, auraInfo, spec, x, y, CARD_SIZE, isSecret)
     -- "Placed" / "Active" overlay
     if alreadyUsed then
         local usedLabel = card:CreateFontString(nil, "OVERLAY")
-        usedLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+        GUI:SetSettingsFont(usedLabel, 9, "OUTLINE")
         usedLabel:SetPoint("CENTER", icon, "CENTER", 0, 0)
         usedLabel:SetText(spellPickerMode == "placed" and L["Placed"] or L["Active"])
         usedLabel:SetTextColor(0.6, 0.6, 0.6)
@@ -3907,7 +4009,7 @@ PopulateSpellGrid = function()
     if not spec or not auras or #auras == 0 then
         -- Show unsupported spec message
         if not grid.unsupportedLabel then
-            local label = grid:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            local label = grid:CreateFontString(nil, "OVERLAY", "DFFontNormal")
             label:SetPoint("TOP", grid, "TOP", 0, -40)
             label:SetWidth(grid:GetWidth() - 32)
             label:SetJustifyH("CENTER")
@@ -3942,7 +4044,7 @@ PopulateSpellGrid = function()
     -- Section header for whitelisted auras
     local HEADER_HEIGHT = 20
     local whitelistHeader = grid:CreateFontString(nil, "OVERLAY")
-    whitelistHeader:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+    GUI:SetSettingsFont(whitelistHeader, 9, "OUTLINE")
     whitelistHeader:SetPoint("TOPLEFT", PADDING, -4)
     whitelistHeader:SetText(L["WHITELISTED"])
     whitelistHeader:SetTextColor(0.70, 0.70, 0.70, 1)
@@ -3969,14 +4071,14 @@ PopulateSpellGrid = function()
 
         -- Section header label
         local header = grid:CreateFontString(nil, "OVERLAY")
-        header:SetFont("Fonts\\FRIZQT__.TTF", 9, "OUTLINE")
+        GUI:SetSettingsFont(header, 9, "OUTLINE")
         header:SetPoint("TOPLEFT", PADDING, separatorY - 2)
         header:SetText(L["INFERRED TRACKING"])
         header:SetTextColor(0.70, 0.70, 0.78, 1)
 
         -- Subtitle explaining what inferred tracking means
         local subtitle = grid:CreateFontString(nil, "OVERLAY")
-        subtitle:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+        GUI:SetSettingsFont(subtitle, 8, "")
         subtitle:SetPoint("TOPLEFT", PADDING, separatorY - 14)
         subtitle:SetWidth(gridWidth - PADDING * 2)
         subtitle:SetJustifyH("LEFT")
@@ -4082,11 +4184,23 @@ CreateEffectCard = function(parent, yPos, effect)
         {r = badgeColor.r * 0.45, g = badgeColor.g * 0.45, b = badgeColor.b * 0.45, a = 0.8})
 
     local badgeText = badgeBg:CreateFontString(nil, "OVERLAY")
-    badgeText:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
+    GUI:SetSettingsFont(badgeText, 8, "OUTLINE")
     badgeText:SetPoint("CENTER", 0, 0)
     badgeText:SetText(typeLabel)
     badgeText:SetTextColor(1, 1, 1)
     badgeBg:SetWidth(max(badgeText:GetStringWidth() + 12, 32))
+
+    -- Warning badge for auras with API-level tracking limitations
+    -- (positioned to the right of the type badge)
+    local warnKey = GetAuraWarningKey(spec, effect.auraName)
+    AttachWarningBadge(header, warnKey, {
+        point = "LEFT",
+        relativeTo = badgeBg,
+        relativePoint = "RIGHT",
+        offsetX = 4,
+        offsetY = 0,
+        size = 16,
+    })
 
     -- Aura name + anchor/trigger/group info
     local infoStr = effect.displayName
@@ -4108,8 +4222,12 @@ CreateEffectCard = function(parent, yPos, effect)
             infoStr = infoStr .. "  -  +" .. (#triggers - 1) .. " trigger" .. (#triggers > 2 and "s" or "") .. opLabel
         end
     end
-    local infoText = header:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    infoText:SetPoint("LEFT", badgeBg, "RIGHT", 6, 0)
+    local infoText = header:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
+    if warnKey and header.dfWarningBadge and header.dfWarningBadge:IsShown() then
+        infoText:SetPoint("LEFT", header.dfWarningBadge, "RIGHT", 6, 0)
+    else
+        infoText:SetPoint("LEFT", badgeBg, "RIGHT", 6, 0)
+    end
     infoText:SetPoint("RIGHT", header, "RIGHT", indicatorGroup and -8 or -30, 0)
     infoText:SetMaxLines(1)
     infoText:SetText(infoStr)
@@ -4207,7 +4325,7 @@ CreateEffectCard = function(parent, yPos, effect)
             trigContainer:SetPoint("RIGHT", body, "RIGHT", -8, 0)
 
             local trigLabel = trigContainer:CreateFontString(nil, "OVERLAY")
-            trigLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+            GUI:SetSettingsFont(trigLabel, 9, "")
             trigLabel:SetPoint("TOPLEFT", 0, 0)
             trigLabel:SetText(L["TRIGGERED BY"])
             trigLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -4223,7 +4341,7 @@ CreateEffectCard = function(parent, yPos, effect)
                 opBtn:SetPoint("LEFT", trigLabel, "RIGHT", 6, 0)
 
                 local opText = opBtn:CreateFontString(nil, "OVERLAY")
-                opText:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+                GUI:SetSettingsFont(opText, 9, "")
                 opText:SetPoint("CENTER", 0, 0)
                 opText:SetText(isAnd and L["ALL (AND)"] or L["ANY (OR)"])
                 opText:SetTextColor(isAnd and 0.9 or 0.6, isAnd and 0.7 or 0.8, isAnd and 0.5 or 0.6)
@@ -4285,7 +4403,7 @@ CreateEffectCard = function(parent, yPos, effect)
                 tagFrame:SetHeight(TAG_H)
 
                 local tagText = tagFrame:CreateFontString(nil, "OVERLAY")
-                tagText:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+                GUI:SetSettingsFont(tagText, 9, "")
                 tagText:SetPoint("LEFT", 6, 0)
                 tagText:SetText(displayNames[trigName] or trigName)
                 tagText:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -4355,7 +4473,7 @@ CreateEffectCard = function(parent, yPos, effect)
                 {r = 0.10, g = 0.12, b = 0.10, a = 1},
                 {r = 0.25, g = 0.40, b = 0.25, a = 0.8})
             local addTrigText = addTrigBtn:CreateFontString(nil, "OVERLAY")
-            addTrigText:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+            GUI:SetSettingsFont(addTrigText, 9, "")
             addTrigText:SetPoint("CENTER", 0, 0)
             addTrigText:SetText(L["+ Add Trigger"])
             addTrigText:SetTextColor(0.5, 0.8, 0.5)
@@ -4413,7 +4531,7 @@ CreateEffectCard = function(parent, yPos, effect)
                     btn:SetPoint("RIGHT", drop, "RIGHT", -4, 0)
 
                     local lbl = btn:CreateFontString(nil, "OVERLAY")
-                    lbl:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+                    GUI:SetSettingsFont(lbl, 9, "")
                     lbl:SetPoint("LEFT", 6, 0)
                     lbl:SetText(auraInfo.display or auraInfo.name)
                     if alreadyAdded then
@@ -4461,7 +4579,7 @@ CreateEffectCard = function(parent, yPos, effect)
                 bmContainer:SetHeight(26)
 
                 local bmLabel = bmContainer:CreateFontString(nil, "OVERLAY")
-                bmLabel:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+                GUI:SetSettingsFont(bmLabel, 9, "")
                 bmLabel:SetPoint("LEFT", 0, 0)
                 bmLabel:SetText(L["Border Mode:"])
                 bmLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -4472,7 +4590,7 @@ CreateEffectCard = function(parent, yPos, effect)
                 sharedBtn:SetPoint("LEFT", bmLabel, "RIGHT", 6, 0)
 
                 local sharedText = sharedBtn:CreateFontString(nil, "OVERLAY")
-                sharedText:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+                GUI:SetSettingsFont(sharedText, 9, "")
                 sharedText:SetPoint("CENTER", 0, 0)
                 sharedText:SetText(L["Shared"])
                 local sharedW = sharedText:GetStringWidth() + 16
@@ -4485,7 +4603,7 @@ CreateEffectCard = function(parent, yPos, effect)
                 customBtn:SetPoint("LEFT", sharedBtn, "RIGHT", 4, 0)
 
                 local customText = customBtn:CreateFontString(nil, "OVERLAY")
-                customText:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+                GUI:SetSettingsFont(customText, 9, "")
                 customText:SetPoint("CENTER", 0, 0)
                 customText:SetText(L["Custom"])
                 local customW = customText:GetStringWidth() + 16
@@ -4614,7 +4732,7 @@ BuildEffectsTab = function()
         {r = tc.r * 0.50, g = tc.g * 0.50, b = tc.b * 0.50, a = 1})
 
     local addBtnText = addBtn:CreateFontString(nil, "OVERLAY")
-    addBtnText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+    GUI:SetSettingsFont(addBtnText, 11, "OUTLINE")
     addBtnText:SetPoint("CENTER", 0, 0)
     addBtnText:SetText(L["+ Add Indicator"])
     addBtnText:SetTextColor(tc.r, tc.g, tc.b)
@@ -4660,7 +4778,7 @@ BuildEffectsTab = function()
 
     -- Section: Placed on Frame
     local placedHeader = menuFrame:CreateFontString(nil, "OVERLAY")
-    placedHeader:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+    GUI:SetSettingsFont(placedHeader, 9, "")
     placedHeader:SetPoint("TOPLEFT", 10, my)
     placedHeader:SetText(L["PLACED ON FRAME"])
     placedHeader:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -4673,7 +4791,7 @@ BuildEffectsTab = function()
         menuBtn:SetPoint("RIGHT", menuFrame, "RIGHT", -4, 0)
         local bc = BADGE_COLORS[item.type]
         local lbl = menuBtn:CreateFontString(nil, "OVERLAY")
-        lbl:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+        GUI:SetSettingsFont(lbl, 10, "")
         lbl:SetPoint("LEFT", 8, 0)
         lbl:SetText(item.label)
         lbl:SetTextColor(bc.r, bc.g, bc.b)
@@ -4699,7 +4817,7 @@ BuildEffectsTab = function()
 
     -- Section: Frame-level Effects
     local frameHeader = menuFrame:CreateFontString(nil, "OVERLAY")
-    frameHeader:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+    GUI:SetSettingsFont(frameHeader, 9, "")
     frameHeader:SetPoint("TOPLEFT", 10, my)
     frameHeader:SetText(L["FRAME-LEVEL EFFECTS"])
     frameHeader:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -4712,7 +4830,7 @@ BuildEffectsTab = function()
         menuBtn:SetPoint("RIGHT", menuFrame, "RIGHT", -4, 0)
         local bc = BADGE_COLORS[item.type]
         local lbl = menuBtn:CreateFontString(nil, "OVERLAY")
-        lbl:SetFont("Fonts\\FRIZQT__.TTF", 10, "")
+        GUI:SetSettingsFont(lbl, 10, "")
         lbl:SetPoint("LEFT", 8, 0)
         lbl:SetText(item.label)
         lbl:SetTextColor(bc.r, bc.g, bc.b)
@@ -4741,7 +4859,7 @@ BuildEffectsTab = function()
 
     -- ── ACTIVE INDICATORS heading ──
     local activeHeader = parent:CreateFontString(nil, "OVERLAY")
-    activeHeader:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+    GUI:SetSettingsFont(activeHeader, 9, "")
     activeHeader:SetPoint("TOPLEFT", 10, yPos)
     activeHeader:SetText(L["ACTIVE INDICATORS"])
     activeHeader:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -4774,7 +4892,7 @@ BuildEffectsTab = function()
         chipBtn:SetHeight(CHIP_H)
 
         local chipTxt = chipBtn:CreateFontString(nil, "OVERLAY")
-        chipTxt:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+        GUI:SetSettingsFont(chipTxt, 10, "OUTLINE")
         chipTxt:SetPoint("CENTER", 0, 0)
         chipTxt:SetText(chip.label)
 
@@ -4846,7 +4964,7 @@ BuildEffectsTab = function()
     end
 
     if #filtered == 0 then
-        local empty = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local empty = parent:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         empty:SetPoint("TOP", parent, "TOP", 0, yPos - 30)
         empty:SetWidth(220)
         local spec = ResolveSpec()
@@ -4899,7 +5017,7 @@ BuildLayoutGroupsTab = function()
         {r = gc.r * 0.10, g = gc.g * 0.10, b = gc.b * 0.10, a = 1},
         {r = gc.r * 0.50, g = gc.g * 0.50, b = gc.b * 0.50, a = 1})
     local addBtnText = addBtn:CreateFontString(nil, "OVERLAY")
-    addBtnText:SetFont("Fonts\\FRIZQT__.TTF", 11, "OUTLINE")
+    GUI:SetSettingsFont(addBtnText, 11, "OUTLINE")
     addBtnText:SetPoint("CENTER", 0, 0)
     addBtnText:SetText(L["+ Create Group"])
     addBtnText:SetTextColor(gc.r, gc.g, gc.b)
@@ -4938,7 +5056,7 @@ BuildLayoutGroupsTab = function()
 
     if #groups == 0 then
         -- Empty state
-        local empty = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local empty = parent:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         empty:SetPoint("TOP", parent, "TOP", 0, yPos - 30)
         empty:SetWidth(220)
         empty:SetText(L["No layout groups created yet.\nClick '+ Create Group' to get started."])
@@ -4974,7 +5092,7 @@ BuildLayoutGroupsTab = function()
             chevron:SetVertexColor(gc.r, gc.g, gc.b)
 
             -- Group name
-            local nameText = header:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local nameText = header:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             nameText:SetPoint("LEFT", chevron, "RIGHT", 6, 0)
             nameText:SetPoint("RIGHT", header, "RIGHT", -60, 0)
             nameText:SetMaxLines(1)
@@ -5041,7 +5159,7 @@ BuildLayoutGroupsTab = function()
 
                 -- Group Name (editable)
                 local nameLabel = body:CreateFontString(nil, "OVERLAY")
-                nameLabel:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+                GUI:SetSettingsFont(nameLabel, 8, "")
                 nameLabel:SetPoint("TOPLEFT", 8, by)
                 nameLabel:SetText(L["GROUP NAME"])
                 nameLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -5051,7 +5169,7 @@ BuildLayoutGroupsTab = function()
                 nameEdit:SetHeight(22)
                 nameEdit:SetPoint("TOPLEFT", 8, by)
                 nameEdit:SetPoint("RIGHT", body, "RIGHT", -8, 0)
-                nameEdit:SetFontObject("GameFontHighlightSmall")
+                nameEdit:SetFontObject("DFFontHighlightSmall")
                 nameEdit:SetAutoFocus(false)
                 nameEdit:SetText(group.name)
                 nameEdit:SetMaxLetters(30)
@@ -5073,7 +5191,7 @@ BuildLayoutGroupsTab = function()
 
                 -- ── MEMBERS SECTION ──
                 local memLabel = body:CreateFontString(nil, "OVERLAY")
-                memLabel:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+                GUI:SetSettingsFont(memLabel, 8, "")
                 memLabel:SetPoint("TOPLEFT", 8, by)
                 memLabel:SetText(L["MEMBERS"])
                 memLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -5176,7 +5294,7 @@ BuildLayoutGroupsTab = function()
                             {r = mBadgeColor.r * 0.20, g = mBadgeColor.g * 0.20, b = mBadgeColor.b * 0.20, a = 1},
                             {r = mBadgeColor.r * 0.45, g = mBadgeColor.g * 0.45, b = mBadgeColor.b * 0.45, a = 0.6})
                         local mBadgeText = mBadge:CreateFontString(nil, "OVERLAY")
-                        mBadgeText:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
+                        GUI:SetSettingsFont(mBadgeText, 8, "OUTLINE")
                         mBadgeText:SetPoint("CENTER", 0, 0)
                         mBadgeText:SetText(mBadgeLabel)
                         mBadgeText:SetTextColor(1, 1, 1)
@@ -5216,7 +5334,7 @@ BuildLayoutGroupsTab = function()
                             {r = custTC.r * 0.15, g = custTC.g * 0.15, b = custTC.b * 0.15, a = 1},
                             {r = custTC.r * 0.35, g = custTC.g * 0.35, b = custTC.b * 0.35, a = 0.6})
                         local custText = custBtn:CreateFontString(nil, "OVERLAY")
-                        custText:SetFont("Fonts\\FRIZQT__.TTF", 8, "OUTLINE")
+                        GUI:SetSettingsFont(custText, 8, "OUTLINE")
                         custText:SetPoint("CENTER", 0, 0)
                         custText:SetText(L["Customise"])
                         custText:SetTextColor(custTC.r, custTC.g, custTC.b)
@@ -5236,7 +5354,7 @@ BuildLayoutGroupsTab = function()
                         end)
 
                         -- Aura name
-                        local mName = memberRow:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                        local mName = memberRow:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
                         mName:SetPoint("LEFT", mBadge, "RIGHT", 6, 0)
                         mName:SetPoint("RIGHT", custBtn, "LEFT", -4, 0)
                         mName:SetMaxLines(1)
@@ -5246,7 +5364,7 @@ BuildLayoutGroupsTab = function()
                         by = by - 38
                     end
                 else
-                    local noMem = body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                    local noMem = body:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
                     noMem:SetPoint("TOPLEFT", 12, by)
                     noMem:SetText(L["No members yet"])
                     noMem:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b, 0.6)
@@ -5263,7 +5381,7 @@ BuildLayoutGroupsTab = function()
                     {r = 0.10, g = 0.12, b = 0.10, a = 1},
                     {r = 0.25, g = 0.40, b = 0.25, a = 0.6})
                 local addMemText = addMemBtn:CreateFontString(nil, "OVERLAY")
-                addMemText:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+                GUI:SetSettingsFont(addMemText, 9, "")
                 addMemText:SetPoint("CENTER", 0, 0)
                 addMemText:SetText(L["+ Add aura"])
                 addMemText:SetTextColor(0.5, 0.8, 0.5)
@@ -5382,7 +5500,7 @@ BuildLayoutGroupsTab = function()
 
                         -- Aura name
                         local rName = row:CreateFontString(nil, "OVERLAY")
-                        rName:SetFont("Fonts\\FRIZQT__.TTF", 9, "")
+                        GUI:SetSettingsFont(rName, 9, "")
                         rName:SetPoint("LEFT", dot, "RIGHT", 6, 0)
                         rName:SetText(auraInfo.display)
 
@@ -5408,7 +5526,7 @@ BuildLayoutGroupsTab = function()
                                     {r = bc.r * 0.4, g = bc.g * 0.4, b = bc.b * 0.4, a = 0.6})
 
                                 local tLbl = typeBtn:CreateFontString(nil, "OVERLAY")
-                                tLbl:SetFont("Fonts\\FRIZQT__.TTF", 7.5, "OUTLINE")
+                                GUI:SetSettingsFont(tLbl, 7.5, "OUTLINE")
                                 tLbl:SetPoint("CENTER", 0, 0)
                                 tLbl:SetText(typeLbl)
                                 tLbl:SetTextColor(bc.r, bc.g, bc.b)
@@ -5461,7 +5579,7 @@ BuildLayoutGroupsTab = function()
                 -- ── PLACEMENT SECTION ──
                 by = by - 10
                 local placeLabel = body:CreateFontString(nil, "OVERLAY")
-                placeLabel:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+                GUI:SetSettingsFont(placeLabel, 8, "")
                 placeLabel:SetPoint("TOPLEFT", 8, by)
                 placeLabel:SetText(L["PLACEMENT"])
                 placeLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -5499,7 +5617,7 @@ BuildLayoutGroupsTab = function()
                 -- ── GROWTH SECTION ──
                 by = by - 10
                 local growLabel = body:CreateFontString(nil, "OVERLAY")
-                growLabel:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+                GUI:SetSettingsFont(growLabel, 8, "")
                 growLabel:SetPoint("TOPLEFT", 8, by)
                 growLabel:SetText(L["GROWTH"])
                 growLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -5654,7 +5772,7 @@ function DF.BuildAuraDesignerPage(guiRef, pageRef, dbRef)
     coexistBanner:SetPoint("TOPRIGHT", mainFrame, "TOPRIGHT", 0, yPos)
     ApplyBackdrop(coexistBanner, {r = 0.14, g = 0.14, b = 0.14, a = 1}, {r = 0.30, g = 0.30, b = 0.30, a = 0.5})
 
-    local coexistText = coexistBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local coexistText = coexistBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     coexistText:SetPoint("LEFT", 10, 0)
     coexistText:SetText(L["Standard Buffs are also visible on frames."])
     coexistText:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -5663,7 +5781,7 @@ function DF.BuildAuraDesignerPage(guiRef, pageRef, dbRef)
     local disableBuffsBtn = CreateFrame("Button", nil, coexistBanner)
     disableBuffsBtn:SetSize(90, 18)
     disableBuffsBtn:SetPoint("LEFT", coexistText, "RIGHT", 8, 0)
-    disableBuffsBtn.text = disableBuffsBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    disableBuffsBtn.text = disableBuffsBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     disableBuffsBtn.text:SetAllPoints()
     disableBuffsBtn.text:SetText(L["Disable Buffs"])
     disableBuffsBtn.text:SetTextColor(tc.r, tc.g, tc.b)
@@ -5745,7 +5863,7 @@ function DF.BuildAuraDesignerPage(guiRef, pageRef, dbRef)
         btn.accent:SetColorTexture(def.color.r, def.color.g, def.color.b, 1)
         btn.accent:Hide()
 
-        btn.label = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        btn.label = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         btn.label:SetPoint("CENTER", 0, 1)
         btn.label:SetText(def.label)
         btn.label:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -5836,16 +5954,16 @@ function DF.BuildAuraDesignerPage(guiRef, pageRef, dbRef)
     backBtn:SetScript("OnEnter", function(self) self.icon:SetVertexColor(1, 1, 1) end)
     backBtn:SetScript("OnLeave", function(self) self.icon:SetVertexColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b) end)
 
-    spellPickerView.title = pickerHeader:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    spellPickerView.title = pickerHeader:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     spellPickerView.title:SetPoint("LEFT", backBtn, "RIGHT", 4, 0)
     spellPickerView.title:SetText(L["Select a spell"])
     spellPickerView.title:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
 
-    spellPickerView.typeBadge = pickerHeader:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    spellPickerView.typeBadge = pickerHeader:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     spellPickerView.typeBadge:SetPoint("LEFT", spellPickerView.title, "RIGHT", 6, 0)
 
     -- Spell picker hint
-    local pickerHint = spellPickerView:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local pickerHint = spellPickerView:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     pickerHint:SetPoint("TOPLEFT", pickerHeader, "BOTTOMLEFT", 12, -8)
     pickerHint:SetText(L["Click or drag a spell onto the frame to place it"])
     pickerHint:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -5993,12 +6111,12 @@ function DF:AuraDesigner_RefreshPage()
                 bg:SetAllPoints()
                 bg:SetColorTexture(0.08, 0.08, 0.08, 0.85)
 
-                local label = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                local label = overlay:CreateFontString(nil, "OVERLAY", "DFFontNormal")
                 label:SetPoint("CENTER", 0, 10)
                 label:SetText(L["Aura Designer is disabled"])
                 label:SetTextColor(0.6, 0.6, 0.6, 1)
 
-                local sublabel = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                local sublabel = overlay:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
                 sublabel:SetPoint("TOP", label, "BOTTOM", 0, -4)
                 sublabel:SetText(L["Enable the checkbox above to use"])
                 sublabel:SetTextColor(0.45, 0.45, 0.45, 1)

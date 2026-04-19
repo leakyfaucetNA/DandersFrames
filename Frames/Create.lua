@@ -829,7 +829,7 @@ function DF:CreateFrameElementsExtended(frame, db)
     frame.restedIndicator.zTexts = {}
     for i = 1, 3 do
         local z = frame.restedIndicator:CreateFontString(nil, "OVERLAY")
-        z:SetFont("Fonts\\FRIZQT__.TTF", zSizes[i], "OUTLINE")
+        DF:SafeSetFont(z, nil, zSizes[i], "OUTLINE")
         z:SetText("Z")
         z:SetTextColor(1, 0.82, 0, 1)
         z:SetPoint("BOTTOMLEFT", frame.restedIndicator, "BOTTOMLEFT", zOffsets[i], zYOffsets[i])
@@ -837,7 +837,7 @@ function DF:CreateFrameElementsExtended(frame, db)
         z.baseSize = zSizes[i]
         frame.restedIndicator.zTexts[i] = z
     end
-    
+
     -- Create glow texture
     frame.restedGlow = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
     frame.restedGlow:SetPoint("TOPLEFT", frame, "TOPLEFT", -4, 4)
@@ -877,7 +877,7 @@ function DF:CreateFrameElementsExtended(frame, db)
             
             z:SetAlpha(alpha)
             local baseSize = z.baseSize
-            z:SetFont("Fonts\\FRIZQT__.TTF", baseSize * scale, "OUTLINE")
+            DF:SafeSetFont(z, nil, baseSize * scale, "OUTLINE")
         end
         
         local glowAlpha = 0.2 + (math.sin(self.animTime * 3) * 0.15 + 0.1)
@@ -1526,7 +1526,7 @@ function DF:CreateUnitFrame(unit, index, isRaid)
     frame.restedIndicator.zTexts = {}
     for i = 1, 3 do
         local z = frame.restedIndicator:CreateFontString(nil, "OVERLAY")
-        z:SetFont("Fonts\\FRIZQT__.TTF", zSizes[i], "OUTLINE")
+        DF:SafeSetFont(z, nil, zSizes[i], "OUTLINE")
         z:SetText("Z")
         z:SetTextColor(1, 0.82, 0, 1)  -- Yellow/gold color
         z:SetPoint("BOTTOMLEFT", frame.restedIndicator, "BOTTOMLEFT", zOffsets[i], zYOffsets[i])
@@ -1582,7 +1582,7 @@ function DF:CreateUnitFrame(unit, index, isRaid)
             -- Scale effect by adjusting font size
             -- PERFORMANCE FIX: Use stored baseSize instead of creating table every frame
             local baseSize = z.baseSize
-            z:SetFont("Fonts\\FRIZQT__.TTF", baseSize * scale, "OUTLINE")
+            DF:SafeSetFont(z, nil, baseSize * scale, "OUTLINE")
         end
         
         -- Animate glow pulsing (stronger pulse)

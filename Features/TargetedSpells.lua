@@ -704,7 +704,7 @@ local function CreateSingleIcon(parent, index)
     
     -- Custom duration text (on overlay so it's above the swipe)
     local durationText = textOverlay:CreateFontString(nil, "OVERLAY")
-    durationText:SetFont("Fonts\\FRIZQT__.TTF", 10, "OUTLINE")
+    DF.GUI:SetSettingsFont(durationText, 10, "OUTLINE")
     durationText:SetPoint("CENTER", iconFrame, "CENTER", 0, 0)
     durationText:SetTextColor(1, 1, 1, 1)
     container.durationText = durationText
@@ -727,7 +727,7 @@ local function CreateSingleIcon(parent, index)
     
     -- X mark for interrupted
     local interruptX = interruptOverlay:CreateFontString(nil, "OVERLAY")
-    interruptX:SetFont("Fonts\\FRIZQT__.TTF", 16, "OUTLINE")
+    DF.GUI:SetSettingsFont(interruptX, 16, "OUTLINE")
     interruptX:SetPoint("CENTER", iconFrame, "CENTER", 0, 0)
     interruptX:SetText("X")
     interruptX:SetTextColor(1, 0, 0, 1)
@@ -1281,7 +1281,7 @@ local function ShowInterruptedVisual(icon, db)
         if showX then
             icon.interruptX:Show()
             icon.interruptX:SetTextColor(xColor.r, xColor.g, xColor.b, 1)
-            icon.interruptX:SetFont("Fonts\\FRIZQT__.TTF", xSize, "OUTLINE")
+            DF.GUI:SetSettingsFont(icon.interruptX, xSize, "OUTLINE")
         else
             icon.interruptX:Hide()
         end
@@ -1916,8 +1916,7 @@ local function NeedsCastEvents()
         return groupOn or personalOn
     end
     if modeNeeds(DF.db.party) or modeNeeds(DF.db.raid) then return true end
-    -- Targeted List is alpha/beta-only and party-only; the call is
-    -- gated by DF.RELEASE_CHANNEL inside the helper.
+    -- Targeted List is party-only
     if DF.TargetedListNeedsCastEvents and DF:TargetedListNeedsCastEvents() then
         return true
     end
@@ -2139,7 +2138,7 @@ local function CreatePersonalIcon(index)
     
     -- Duration text
     local durationText = textOverlay:CreateFontString(nil, "OVERLAY")
-    durationText:SetFont("Fonts\\FRIZQT__.TTF", 12, "OUTLINE")
+    DF.GUI:SetSettingsFont(durationText, 12, "OUTLINE")
     durationText:SetPoint("CENTER", iconFrame, "CENTER", 0, 0)
     durationText:SetTextColor(1, 1, 1, 1)
     icon.durationText = durationText
@@ -2159,7 +2158,7 @@ local function CreatePersonalIcon(index)
     icon.interruptTint = interruptTint
     
     local interruptX = interruptOverlay:CreateFontString(nil, "OVERLAY")
-    interruptX:SetFont("Fonts\\FRIZQT__.TTF", 20, "OUTLINE")
+    DF.GUI:SetSettingsFont(interruptX, 20, "OUTLINE")
     interruptX:SetPoint("CENTER", iconFrame, "CENTER", 0, 0)
     interruptX:SetText("X")
     interruptX:SetTextColor(1, 0, 0, 1)
@@ -2436,7 +2435,7 @@ local function ApplyPersonalIconSettings(icon, db, spellID)
         if interruptShowX then
             icon.interruptX:Show()
             icon.interruptX:SetTextColor(interruptXColor.r, interruptXColor.g, interruptXColor.b, 1)
-            icon.interruptX:SetFont("Fonts\\FRIZQT__.TTF", interruptXSize, "OUTLINE")
+            DF.GUI:SetSettingsFont(icon.interruptX, interruptXSize, "OUTLINE")
         else
             icon.interruptX:Hide()
         end
@@ -2745,7 +2744,7 @@ function DF:CreatePersonalTargetedSpellsMover()
     mover:RegisterForDrag("LeftButton")
     mover:Hide()
     
-    local label = mover:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local label = mover:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     label:SetPoint("CENTER")
     label:SetText("Personal\nTargeted Spells")
     label:SetTextColor(1, 1, 1, 1)
@@ -3063,13 +3062,13 @@ function DF:CreateCastHistoryUI()
     titleBar:SetBackdropColor(C_PANEL.r, C_PANEL.g, C_PANEL.b, 1)
     titleBar:SetBackdropBorderColor(C_BORDER.r, C_BORDER.g, C_BORDER.b, 0.5)
     
-    local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local title = titleBar:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     title:SetPoint("LEFT", 10, 4)
     title:SetText("Cast History")
     title:SetTextColor(C_ACCENT.r, C_ACCENT.g, C_ACCENT.b)
     
     -- Subtitle note
-    local subtitle = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local subtitle = titleBar:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     subtitle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, 0)
     subtitle:SetText("Persists through load screens, resets on /reload")
     subtitle:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b, 0.7)
@@ -3111,7 +3110,7 @@ function DF:CreateCastHistoryUI()
     })
     clearBtn:SetBackdropColor(C_ELEMENT.r, C_ELEMENT.g, C_ELEMENT.b, 1)
     clearBtn:SetBackdropBorderColor(C_BORDER.r, C_BORDER.g, C_BORDER.b, 0.5)
-    local clearTxt = clearBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local clearTxt = clearBtn:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     clearTxt:SetPoint("CENTER")
     clearTxt:SetText("Clear")
     clearTxt:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -3138,19 +3137,19 @@ function DF:CreateCastHistoryUI()
     headerFrame:SetBackdropColor(C_PANEL.r, C_PANEL.g, C_PANEL.b, 1)
     headerFrame:SetBackdropBorderColor(C_BORDER.r, C_BORDER.g, C_BORDER.b, 0.3)
     
-    local headerTime = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local headerTime = headerFrame:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     headerTime:SetPoint("LEFT", 5, 0)
     headerTime:SetWidth(30)
     headerTime:SetText("Time")
     headerTime:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
     
-    local headerSpell = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local headerSpell = headerFrame:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     headerSpell:SetPoint("LEFT", 40, 0)
     headerSpell:SetWidth(100)
     headerSpell:SetText("Spell")
     headerSpell:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
     
-    local headerCaster = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local headerCaster = headerFrame:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     headerCaster:SetPoint("LEFT", 165, 0)
     headerCaster:SetWidth(70)
     headerCaster:SetText("Caster")
@@ -3159,7 +3158,7 @@ function DF:CreateCastHistoryUI()
     -- Player name headers (will be updated dynamically)
     frame.playerHeaders = {}
     for i = 1, 5 do
-        local header = headerFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local header = headerFrame:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
         header:SetPoint("LEFT", 240 + (i-1) * 65, 0)
         header:SetWidth(60)
         header:SetJustifyH("CENTER")
@@ -3198,7 +3197,7 @@ function DF:CreateCastHistoryUI()
         row.rowIndex = i  -- Store for alternating colors
         
         -- Time text
-        local timeText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local timeText = row:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
         timeText:SetPoint("LEFT", 5, 0)
         timeText:SetWidth(30)
         timeText:SetJustifyH("LEFT")
@@ -3245,7 +3244,7 @@ function DF:CreateCastHistoryUI()
         row.importantBorder = importantBorder
         
         -- Spell name
-        local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local nameText = row:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
         nameText:SetPoint("LEFT", iconFrame, "RIGHT", 4, 0)
         nameText:SetWidth(100)
         nameText:SetJustifyH("LEFT")
@@ -3254,7 +3253,7 @@ function DF:CreateCastHistoryUI()
         row.nameText = nameText
         
         -- Caster name
-        local casterText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local casterText = row:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
         casterText:SetPoint("LEFT", 165, 0)
         casterText:SetWidth(70)
         casterText:SetJustifyH("LEFT")
@@ -3272,7 +3271,7 @@ function DF:CreateCastHistoryUI()
             -- YES frame (shown when targeted)
             local yesFrame = CreateFrame("Frame", nil, container)
             yesFrame:SetAllPoints()
-            local yesText = yesFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            local yesText = yesFrame:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
             yesText:SetAllPoints()
             yesText:SetText("|cffff6666YES|r")
             yesText:SetJustifyH("CENTER")
@@ -3281,14 +3280,14 @@ function DF:CreateCastHistoryUI()
             -- No frame (shown when not targeted)
             local noFrame = CreateFrame("Frame", nil, container)
             noFrame:SetAllPoints()
-            local noText = noFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            local noText = noFrame:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
             noText:SetAllPoints()
             noText:SetText("|cff444444-|r")
             noText:SetJustifyH("CENTER")
             container.noFrame = noFrame
             
             -- N/A text
-            local naText = container:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            local naText = container:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
             naText:SetAllPoints()
             naText:SetText("|cff222222--|r")
             naText:SetJustifyH("CENTER")
@@ -3355,7 +3354,7 @@ function DF:CreateCastHistoryUI()
         btn:SetBackdropColor(C_ELEMENT.r, C_ELEMENT.g, C_ELEMENT.b, 1)
         btn:SetBackdropBorderColor(C_BORDER.r, C_BORDER.g, C_BORDER.b, 0.5)
         
-        local btnText = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local btnText = btn:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
         btnText:SetPoint("CENTER")
         btnText:SetText(text)
         btnText:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
@@ -3413,7 +3412,7 @@ function DF:CreateCastHistoryUI()
     end)
     frame.nextBtn = nextBtn
     
-    local pageText = pageFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local pageText = pageFrame:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     pageText:SetPoint("CENTER", 0, 0)
     pageText:SetText("Page 1 / 1")
     pageText:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -3616,11 +3615,6 @@ end
 -- members. Anchored to the party frame container. Replaces the
 -- group-frame Targeted Spells icons that Blizzard's 2026-04-07
 -- UnitIsUnit hotfix permanently broke.
---
--- Gated by DF.RELEASE_CHANNEL — feature is fully inert on stable
--- releases. Alpha and beta builds run normally. The matching
--- settings sub-tab in Options.lua is also gated so stable users
--- never see it.
 --
 -- Party-mode only by design. We will not add raid support.
 --
@@ -4369,12 +4363,12 @@ local function TargetedList_BuildBar(parent)
 
     -- Text overlays on the progress bar. Anchor / offset / font are
     -- applied by ApplyBarAppearance and ApplyTextLayout per render.
-    local spellName = progress:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local spellName = progress:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     spellName:SetJustifyV("MIDDLE")
     spellName:SetWordWrap(false)
     bar.spellName = spellName
 
-    local targetName = progress:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local targetName = progress:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     targetName:SetJustifyV("MIDDLE")
     targetName:SetWordWrap(false)
     bar.targetName = targetName
@@ -4383,7 +4377,7 @@ local function TargetedList_BuildBar(parent)
     -- OnUpdate instead of Blizzard's native Cooldown countdown, so that
     -- custom fonts can be applied. The remaining time is read from the
     -- duration object stored on the bar via GetRemainingDuration().
-    local durationText = progress:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local durationText = progress:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     durationText:SetJustifyV("MIDDLE")
     durationText:SetWordWrap(false)
     bar.duration = durationText
@@ -4419,7 +4413,7 @@ local function TargetedList_BuildBar(parent)
     -- Interrupter name FontString — shown during interrupted-flash
     -- fade with the name of who kicked the cast. Overlays spell name
     -- and target name (which are hidden during the flash).
-    local interruptText = progress:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local interruptText = progress:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     interruptText:SetPoint("CENTER", progress, "CENTER", 0, 0)
     interruptText:SetJustifyH("CENTER")
     interruptText:SetJustifyV("MIDDLE")
@@ -5326,7 +5320,7 @@ local function TargetedList_CreateMover()
     mover:RegisterForDrag("LeftButton")
     mover:Hide()
 
-    local label = mover:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local label = mover:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     label:SetPoint("CENTER")
     label:SetText("Targeted List")
     label:SetTextColor(1, 1, 1, 1)
@@ -5933,8 +5927,7 @@ function DF:InitTargetedSpells()
     end
 
     -- Initialize the Targeted List. Safe to call unconditionally — the
-    -- function is gated internally on DF.RELEASE_CHANNEL and on the
-    -- user's targetedListEnabled setting.
+    -- function is gated internally on the user's targetedListEnabled setting.
     if DF.InitTargetedList then
         DF:InitTargetedList()
     end

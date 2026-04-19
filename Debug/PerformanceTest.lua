@@ -44,7 +44,7 @@ local function CreateCheckbox(parent, label, key, x, yOffset)
     cb:SetChecked(DF.PerfTest[key])
     cb.key = key  -- Store key for OnShow refresh
     
-    cb.text = cb:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    cb.text = cb:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     cb.text:SetPoint("LEFT", cb, "RIGHT", 2, 0)
     cb.text:SetText(label)
     
@@ -84,38 +84,38 @@ local function CreatePerfTestFrame()
     })
     
     -- Title
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    local title = frame:CreateFontString(nil, "OVERLAY", "DFFontNormalLarge")
     title:SetPoint("TOP", frame, "TOP", 0, -15)
     title:SetText("DF Performance Test")
     
     -- Subtitle
-    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local subtitle = frame:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     subtitle:SetPoint("TOP", title, "BOTTOM", 0, -3)
     subtitle:SetText("Uncheck to disable systems for testing")
     subtitle:SetTextColor(0.7, 0.7, 0.7)
     
     -- Memory display row
-    frame.memText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.memText = frame:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     frame.memText:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -55)
     frame.memText:SetText("Memory: --")
     frame.memText:SetTextColor(1, 1, 0)
     
-    frame.deltaText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.deltaText = frame:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     frame.deltaText:SetPoint("LEFT", frame.memText, "RIGHT", 20, 0)
     frame.deltaText:SetText("Delta: --")
     frame.deltaText:SetTextColor(0.7, 0.7, 0.7)
     
-    frame.gcMemText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.gcMemText = frame:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     frame.gcMemText:SetPoint("LEFT", frame.deltaText, "RIGHT", 20, 0)
     frame.gcMemText:SetText("After GC: --")
     frame.gcMemText:SetTextColor(0.5, 1, 0.5)
     
     -- Column headers
-    local col1Header = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local col1Header = frame:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     col1Header:SetPoint("TOPLEFT", frame, "TOPLEFT", 15, -80)
     col1Header:SetText("|cff00ff00Major Systems|r")
     
-    local col2Header = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local col2Header = frame:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     col2Header:SetPoint("TOPLEFT", frame, "TOPLEFT", 245, -80)
     col2Header:SetText("|cff00ff00Additional Systems|r")
     

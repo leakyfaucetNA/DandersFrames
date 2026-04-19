@@ -713,6 +713,19 @@ function DF:UpdateMissingBuffIcon(frame)
         return
     end
 
+    -- Hide for out-of-range units (can't reliably query their buffs)
+    local inRange = frame.dfInRange
+    if issecretvalue and issecretvalue(inRange) then
+        -- Secret value = can't tell, hide to be safe
+        frame.missingBuffFrame:Hide()
+        missingBuffCache[frame] = nil
+        return
+    elseif inRange == false then
+        frame.missingBuffFrame:Hide()
+        missingBuffCache[frame] = nil
+        return
+    end
+
     -- Hide for non-player units (NPCs, followers, pets can't have raid buffs)
     if not UnitIsPlayer(unit) then
         frame.missingBuffFrame:Hide()
@@ -986,7 +999,11 @@ function DF:UpdateDefensiveBar(frame)
         local count = 0
         local adIDs = frame.dfAD_activeInstanceIDs  -- Aura Designer dedup
         if cache and cache.defensives then
-            for id in pairs(cache.defensives) do
+            -- Sort by spell ID so defensives get stable slot indices across frames.
+            local sortedIds = {}
+            for id in pairs(cache.defensives) do sortedIds[#sortedIds+1] = id end
+            table.sort(sortedIds)
+            for _, id in ipairs(sortedIds) do
                 if count >= maxDefs then break end
                 -- Skip defensives already shown by Aura Designer
                 if adIDs and adIDs[id] then
@@ -1202,6 +1219,18 @@ function DF:UpdateAllAuras()
                     if child then
                         updateFrame(child)
                     end
+                end
+            end
+        end
+    end
+
+    -- Also update pinned boss frames
+    if DF.PinnedFrames and DF.PinnedFrames.bossFrames then
+        for setIndex = 1, 2 do
+            local frames = DF.PinnedFrames.bossFrames[setIndex]
+            if frames then
+                for i = 1, 8 do
+                    updateFrame(frames[i])
                 end
             end
         end

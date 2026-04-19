@@ -1,3 +1,9 @@
-local L = LibStub("AceLocale-3.0"):NewLocale("DandersFrames", "frFR")
-if not L then return end
+-- Populate DF_AllLocales["frFR"] so Core.lua's ADDON_LOADED handler
+-- can apply this locale's translations as an overlay if the user's
+-- languageOverride selects it. No AceLocale interaction here — the
+-- overlay step happens once the SavedVariable is actually populated,
+-- which is only guaranteed at ADDON_LOADED time (not file-scope).
+DF_AllLocales = DF_AllLocales or {}
+DF_AllLocales.frFR = {}
+local L = DF_AllLocales.frFR
 --@localization(locale="frFR", format="lua_additive_table", handle-unlocalized="comment")@

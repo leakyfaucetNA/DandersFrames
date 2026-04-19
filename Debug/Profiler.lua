@@ -1179,7 +1179,7 @@ local function CreateRow(parent, index)
     row.cols = {}
     local xOffset = 2
     for _, col in ipairs(COLUMNS) do
-        local fs = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local fs = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         fs:SetJustifyH(col.align)
         fs:SetPoint("LEFT", row, "LEFT", xOffset, 0)
         fs:SetWidth(col.width)
@@ -1349,7 +1349,7 @@ function Profiler:CreateUI()
     profilerFrame = f
 
     -- Title
-    local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    local title = f:CreateFontString(nil, "OVERLAY", "DFFontNormalLarge")
     title:SetPoint("TOPLEFT", 12, -10)
     title:SetText("|cff00ff00DF|r Profiler")
 
@@ -1362,7 +1362,7 @@ function Profiler:CreateUI()
     closeBtn:SetScript("OnClick", function() f:Hide() end)
 
     -- Status line
-    f.statusText = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    f.statusText = f:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     f.statusText:SetPoint("TOPLEFT", 12, -32)
     f.statusText:SetJustifyH("LEFT")
     f.statusText:SetText("|cff888888Ready|r  Press Start to begin profiling")
@@ -1423,7 +1423,7 @@ function Profiler:CreateUI()
     })
     durationInput:SetBackdropColor(0.1, 0.1, 0.1, 1)
     durationInput:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
-    durationInput:SetFontObject(GameFontHighlightSmall)
+    durationInput:SetFontObject(DFFontHighlightSmall)
     durationInput:SetJustifyH("CENTER")
     durationInput:SetAutoFocus(false)
     durationInput:SetNumeric(true)
@@ -1563,7 +1563,7 @@ function Profiler:CreateUI()
     hookBanner:SetBackdropBorderColor(0.8, 0.5, 0, 1)
     f.hookBanner = hookBanner
 
-    local hookText = hookBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local hookText = hookBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     hookText:SetPoint("LEFT", 8, 0)
     hookText:SetTextColor(1, 0.8, 0.2)
     f.hookBannerText = hookText
@@ -1588,7 +1588,7 @@ function Profiler:CreateUI()
     end)
     f.hookCheckbox = hookCheckbox
 
-    local hookLabel = hookBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local hookLabel = hookBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     hookLabel:SetPoint("RIGHT", hookCheckbox, "LEFT", -2, 0)
     hookLabel:SetText("Enable")
     hookLabel:SetTextColor(1, 0.8, 0.2)
@@ -1613,7 +1613,7 @@ function Profiler:CreateUI()
         hdr:SetPoint("TOPLEFT", f, "TOPLEFT", xOffset, HEADER_Y)
         hdr:SetWidth(col.width)
 
-        local text = hdr:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local text = hdr:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
         text:SetAllPoints()
         text:SetJustifyH(col.align)
         text:SetTextColor(0.5, 0.75, 1.0)
@@ -1658,7 +1658,7 @@ function Profiler:CreateUI()
     end
 
     -- Info label at bottom
-    local infoLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local infoLabel = f:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     infoLabel:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 12, 8)
     infoLabel:SetTextColor(0.4, 0.4, 0.4)
     infoLabel:SetText("Inclusive times  |  Peak/tk = max calls in one frame  |  Bytes = avg alloc per call")

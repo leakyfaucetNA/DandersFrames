@@ -42,6 +42,34 @@ DF.demoMode = false
 DF.demoPercent = 1
 DF.initialized = false  -- Set to true after frames are created and ready
 
+-- Returns true if the current profile's partyEnabled/raidEnabled flags
+-- differ from the state captured when the addon loaded. A reload is
+-- required to actually create or destroy frame headers, so callers use
+-- this to decide whether to prompt the user.
+function DF:EnableFlagsDifferFromLoaded()
+    if not DF.db then return false end
+    local curParty = DF.db.partyEnabled ~= false
+    local curRaid  = DF.db.raidEnabled  ~= false
+    return curParty ~= (DF.loadedPartyEnabled ~= false)
+        or curRaid  ~= (DF.loadedRaidEnabled  ~= false)
+end
+
+-- Show the standard "reload to apply enable changes" popup if the flags
+-- have diverged from the loaded state. Safe to call from any context.
+function DF:PromptReloadIfEnableFlagsChanged()
+    if not DF:EnableFlagsDifferFromLoaded() then return end
+    if not DF.ShowPopupAlert then return end
+    local L = DF.L
+    DF:ShowPopupAlert({
+        title = L["Reload Required"],
+        message = L["The new profile changes which frame modes are enabled. A UI reload is required to apply this.\n\nReload now?"],
+        buttons = {
+            { label = L["Reload Now"], onClick = function() ReloadUI() end },
+            { label = L["Later"] },
+        },
+    })
+end
+
 -- Aura layout version: incremented when any layout-affecting setting changes.
 -- Frames track the version they were last laid out with to avoid redundant work.
 DF.auraLayoutVersion = 1
@@ -2955,7 +2983,7 @@ function DF:CheckElvUICompatibility()
             btn:SetBackdropBorderColor(0.35, 0.35, 0.35, 1)
         end
         
-        local btnText = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local btnText = btn:CreateFontString(nil, "OVERLAY", "DFFontNormal")
         btnText:SetPoint("CENTER")
         btnText:SetText(text)
         btnText:SetTextColor(1, 1, 1)
@@ -2998,7 +3026,7 @@ function DF:CheckElvUICompatibility()
     popup:SetScript("OnDragStop", popup.StopMovingOrSizing)
     
     -- Title
-    local title = popup:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    local title = popup:CreateFontString(nil, "OVERLAY", "DFFontNormalLarge")
     title:SetPoint("TOP", 0, -14)
     title:SetText("ElvUI Compatibility Issue")
     title:SetTextColor(themeColor.r, themeColor.g, themeColor.b)
@@ -3017,7 +3045,7 @@ function DF:CheckElvUICompatibility()
     rightWarning:SetVertexColor(themeColor.r, themeColor.g, themeColor.b)
     
     -- Explanation
-    local msg = popup:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local msg = popup:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     msg:SetPoint("TOP", title, "BOTTOM", 0, -12)
     msg:SetPoint("LEFT", 25, 0)
     msg:SetPoint("RIGHT", -25, 0)
@@ -3032,7 +3060,7 @@ function DF:CheckElvUICompatibility()
     msg:SetTextColor(0.9, 0.9, 0.9)
     
     -- Settings path callout
-    local pathLabel = popup:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local pathLabel = popup:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     pathLabel:SetPoint("TOP", msg, "BOTTOM", 0, -12)
     pathLabel:SetPoint("LEFT", 25, 0)
     pathLabel:SetPoint("RIGHT", -25, 0)
@@ -3110,7 +3138,7 @@ function DF:CheckElvUICompatibility()
     ignoreBtn:SetSize(200, 26)
     ignoreBtn:ClearAllPoints()
     ignoreBtn:SetPoint("TOP", manualBtn, "BOTTOM", 0, -6)
-    ignoreBtn.label:SetFontObject("GameFontHighlightSmall")
+    ignoreBtn.label:SetFontObject("DFFontHighlightSmall")
     ignoreBtn.label:SetTextColor(0.5, 0.5, 0.5)
     
     -- Store reference
@@ -3255,6 +3283,55 @@ DF._MainEventDispatcher = function(self, event, arg1)
         -- Ensure structure exists in per-character DB
         if DandersFramesCharDB.specProfiles == nil then DandersFramesCharDB.specProfiles = {} end
 
+        -- Language override lives per-character because the locale files
+        -- need to read it at file-load time, before any profile resolution
+        -- happens. SavedVariablesPerCharacter is available at that stage.
+        if DandersFramesCharDB.languageOverride == nil then
+            -- Migrate from the earlier per-profile slot if any profile had it set
+            local migrated = "AUTO"
+            if DandersFramesDB_v2.profiles then
+                for _, profile in pairs(DandersFramesDB_v2.profiles) do
+                    if profile.languageOverride and profile.languageOverride ~= "AUTO" then
+                        migrated = profile.languageOverride
+                        break
+                    end
+                end
+            end
+            DandersFramesCharDB.languageOverride = migrated
+        end
+        -- Clean up legacy per-profile key (no longer read anywhere)
+        if DandersFramesDB_v2.profiles then
+            for _, profile in pairs(DandersFramesDB_v2.profiles) do
+                profile.languageOverride = nil
+            end
+        end
+
+        -- Apply language override: the locale files populated
+        -- DF_AllLocales[locale] at file-scope; we now overlay the chosen
+        -- locale's strings onto AceLocale's app table. Non-enUS client
+        -- locales also flow through here (they populate only the side
+        -- table, not AceLocale directly, so the app otherwise has just
+        -- the enUS baseline).
+        if DF_AllLocales then
+            local override = DandersFramesCharDB.languageOverride
+            local active = (override and override ~= "AUTO") and override or GetLocale()
+            if active ~= "enUS" and DF_AllLocales[active] then
+                local aceL = DF.L
+                for k, v in pairs(DF_AllLocales[active]) do
+                    -- AceLocale stores L["key"] = true as L["key"] = "key"
+                    -- (the key string); we preserve that convention for
+                    -- any `true` values in DF_AllLocales, though real
+                    -- translations are already strings.
+                    rawset(aceL, k, v == true and k or v)
+                end
+            end
+            -- Free the side-table now that the overlay is applied. Changing
+            -- languageOverride requires a /reload (enforced by the dropdown
+            -- popup), which re-populates DF_AllLocales on the next load, so
+            -- we don't need to keep it around for subsequent lookups.
+            DF_AllLocales = nil
+        end
+
         -- Seed per-character profile from account-wide on first login for this character
         if not DandersFramesCharDB.currentProfile then
             DandersFramesCharDB.currentProfile = DandersFramesDB_v2.currentProfile
@@ -3273,6 +3350,7 @@ DF._MainEventDispatcher = function(self, event, arg1)
         if not DandersFramesDB_v2.profiles then DandersFramesDB_v2.profiles = {} end
         if not DandersFramesDB_v2.currentProfile then DandersFramesDB_v2.currentProfile = "Default" end
         if not DandersFramesDB_v2.wizardConfigs then DandersFramesDB_v2.wizardConfigs = {} end
+        if not DandersFramesDB_v2.global then DandersFramesDB_v2.global = {} end
 
         -- Track last seen version for auto-showing changelog on update
         if not DandersFramesDB_v2.lastSeenVersion then
@@ -3286,6 +3364,10 @@ DF._MainEventDispatcher = function(self, event, arg1)
                 classColors = {},
                 powerColors = {},
                 linkedSections = {},
+                partyEnabled = true,
+                raidEnabled = true,
+                settingsFont = "Friz Quadrata TT",
+                settingsFontOutline = "",
             }
         end
         
@@ -3324,6 +3406,27 @@ DF._MainEventDispatcher = function(self, event, arg1)
             DF.db.linkedSections = {}
         end
 
+        -- Ensure mode-enable flags exist (default true for backward compatibility)
+        if DF.db.partyEnabled == nil then DF.db.partyEnabled = true end
+        if DF.db.raidEnabled == nil then DF.db.raidEnabled = true end
+
+        -- Ensure settings-panel font defaults exist
+        if DF.db.settingsFont        == nil then DF.db.settingsFont        = "Friz Quadrata TT" end
+        if DF.db.settingsFontOutline == nil then DF.db.settingsFontOutline = "" end
+
+        -- Snapshot the enable-flag state at load time. After profile switches
+        -- or imports, we compare against this to decide whether to prompt for
+        -- a UI reload. The actual headers are created based on this state and
+        -- can only be (un)created on /reload.
+        DF.loadedPartyEnabled = DF.db.partyEnabled ~= false
+        DF.loadedRaidEnabled  = DF.db.raidEnabled  ~= false
+
+        -- Apply user's Settings Panel font (safe no-op if GUI/DFFonts.lua hasn't loaded yet;
+        -- SetupGUIPages also calls this again after the GUI frame exists)
+        if DF.GUI and DF.GUI.ApplySettingsFont then
+            DF.GUI:ApplySettingsFont()
+        end
+
         -- Ensure auraBlacklist table exists (profile-level, shared across party/raid)
         if not DF.db.auraBlacklist then
             DF.db.auraBlacklist = { buffs = {}, debuffs = {} }
@@ -3357,6 +3460,13 @@ DF._MainEventDispatcher = function(self, event, arg1)
                         end
                     end
                 end
+                -- Ensure mode-enable flags exist on every profile
+                if profile.partyEnabled == nil then profile.partyEnabled = true end
+                if profile.raidEnabled == nil then profile.raidEnabled = true end
+
+                -- Ensure settings-panel font defaults exist on every profile
+                if profile.settingsFont        == nil then profile.settingsFont        = "Friz Quadrata TT" end
+                if profile.settingsFontOutline == nil then profile.settingsFontOutline = "" end
             end
         end
 
@@ -3923,7 +4033,7 @@ DF._MainEventDispatcher = function(self, event, arg1)
                     btn:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
                 end
                 
-                local btnText = btn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                local btnText = btn:CreateFontString(nil, "OVERLAY", "DFFontNormal")
                 btnText:SetPoint("CENTER")
                 btnText:SetText(text)
                 btnText:SetTextColor(1, 1, 1)
@@ -3963,7 +4073,7 @@ DF._MainEventDispatcher = function(self, event, arg1)
             popup:SetScript("OnDragStop", popup.StopMovingOrSizing)
             
             -- Title
-            local title = popup:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+            local title = popup:CreateFontString(nil, "OVERLAY", "DFFontNormalLarge")
             title:SetPoint("TOP", 0, -15)
             title:SetText("Addon Conflict Detected")
             title:SetTextColor(1, 0.3, 0.3)
@@ -3985,7 +4095,7 @@ DF._MainEventDispatcher = function(self, event, arg1)
             popup.rightWarning = rightWarning
             
             -- Message
-            local msg = popup:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            local msg = popup:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
             msg:SetPoint("TOP", title, "BOTTOM", 0, -15)
             msg:SetPoint("LEFT", 25, 0)
             msg:SetPoint("RIGHT", -25, 0)
@@ -3995,7 +4105,7 @@ DF._MainEventDispatcher = function(self, event, arg1)
             popup.msg = msg
             
             -- Warning text
-            local warning = popup:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local warning = popup:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             warning:SetPoint("TOP", msg, "BOTTOM", 0, -10)
             warning:SetPoint("LEFT", 25, 0)
             warning:SetPoint("RIGHT", -25, 0)
@@ -4119,6 +4229,8 @@ DF._MainEventDispatcher = function(self, event, arg1)
                     DF.debugEnabled = not DF.debugEnabled
                     print("|cff00ff00DandersFrames:|r " .. format(L["Debug mode %s"], DF.debugEnabled and L["enabled"] or L["disabled"]))
                 end
+            elseif msg == "users" then
+                if DF.VersionCheck then DF.VersionCheck:PrintUsers() end
             elseif msg == "console" then
                 -- Open settings directly to Debug Console tab
                 if not DF.GUIFrame then
@@ -4410,7 +4522,9 @@ DF._MainEventDispatcher = function(self, event, arg1)
         SlashCmdList["DFRL"] = function()
             ReloadUI()
         end
-        
+
+        if DF.VersionCheck then DF.VersionCheck:Init() end
+
         -- Post-initialization updates (frames already created at ADDON_LOADED)
         -- These need a delay to let Blizzard addons settle and world to be ready
         C_Timer.After(0.5, function()
@@ -4571,6 +4685,12 @@ DF._MainEventDispatcher = function(self, event, arg1)
             DF:UpdateRaidContainerPosition()
         end
         -- Refresh Aura Designer (per-spec aura lists may differ)
+        -- Invalidate the adapter's per-spec spellId cache first — otherwise
+        -- stale entries prevent the new spec's spell IDs (e.g., Earth Shield
+        -- for Resto Shaman) from being recognized after a spec swap.
+        if DF.AuraDesigner and DF.AuraDesigner.Adapter and DF.AuraDesigner.Adapter.InvalidateSpecCache then
+            DF.AuraDesigner.Adapter:InvalidateSpecCache()
+        end
         if DF.AuraDesigner and DF.AuraDesigner.Engine and DF.AuraDesigner.Engine.ForceRefreshAllFrames then
             DF.AuraDesigner.Engine:ForceRefreshAllFrames()
         end

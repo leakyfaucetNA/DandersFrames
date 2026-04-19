@@ -80,6 +80,13 @@ local function GetSpellIdLookup(spec)
     return lookup
 end
 
+-- Clear the per-spec spellId→auraName cache. Called on spec change so the
+-- new spec's spell IDs (e.g., Earth Shield for Resto Shaman) get rebuilt
+-- from DF.AuraDesigner.SpellIDs / AlternateSpellIDs on next lookup.
+function AuraAdapter:InvalidateSpecCache()
+    spellIdLookup = {}
+end
+
 -- Debug throttle for adapter (shares interval with engine)
 local adapterDebugLast = 0
 local ADAPTER_DEBUG_INTERVAL = 3

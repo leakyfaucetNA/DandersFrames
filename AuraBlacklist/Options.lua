@@ -112,7 +112,7 @@ function DF.BuildAuraBlacklistPage(guiRef, pageRef, dbRef)
 
         -- Label text
         local text = cb:CreateFontString(nil, "OVERLAY")
-        text:SetFont("Fonts\\FRIZQT__.TTF", 8, "")
+        GUI:SetSettingsFont(text, 8, "")
         text:SetPoint("LEFT", cb, "RIGHT", 4, 0)
         text:SetText(label)
         text:SetTextColor(0.55, 0.55, 0.55)
@@ -174,7 +174,7 @@ function DF.BuildAuraBlacklistPage(guiRef, pageRef, dbRef)
         end
 
         -- Spell name
-        local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local nameText = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         nameText:SetPoint("LEFT", icon, "RIGHT", 6, 0)
         nameText:SetPoint("RIGHT", -160, 0)
         nameText:SetJustifyH("LEFT")
@@ -297,13 +297,13 @@ function DF.BuildAuraBlacklistPage(guiRef, pageRef, dbRef)
 
         -- Header
         local tc = GetThemeColor()
-        local header = container:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local header = container:CreateFontString(nil, "OVERLAY", "DFFontNormal")
         header:SetPoint("TOPLEFT", 0, 0)
         header:SetText(headerText)
         header:SetTextColor(tc.r, tc.g, tc.b)
 
         -- Blacklisted count (right-aligned next to header)
-        local countText = container:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local countText = container:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
         countText:SetPoint("LEFT", header, "RIGHT", 10, 0)
         countText:SetTextColor(0.5, 0.5, 0.5)
 
@@ -330,7 +330,7 @@ function DF.BuildAuraBlacklistPage(guiRef, pageRef, dbRef)
         scrollFrame:SetScrollChild(scrollContent)
 
         -- Empty hint
-        local emptyText = listBg:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
+        local emptyText = listBg:CreateFontString(nil, "OVERLAY", "DFFontDisableSmall")
         emptyText:SetPoint("CENTER", listBg, "CENTER", 0, 0)
         emptyText:SetText(L["No spells available for this class"])
 
@@ -389,7 +389,7 @@ function DF.BuildAuraBlacklistPage(guiRef, pageRef, dbRef)
     noticeIcon:SetSize(20, 20)
     noticeIcon:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\warning")
 
-    local noticeText = noticeBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local noticeText = noticeBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     noticeText:SetPoint("LEFT", noticeIcon, "RIGHT", 8, 0)
     noticeText:SetPoint("RIGHT", noticeBanner, "RIGHT", -10, 0)
     noticeText:SetJustifyH("LEFT")
@@ -397,7 +397,7 @@ function DF.BuildAuraBlacklistPage(guiRef, pageRef, dbRef)
     noticeText:SetTextColor(1, 0.82, 0)
 
     -- ========== DESCRIPTION ==========
-    local desc = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local desc = parent:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     desc:SetPoint("TOPLEFT", noticeBanner, "BOTTOMLEFT", 0, -8)
     desc:SetPoint("RIGHT", -10, 0)
     desc:SetJustifyH("LEFT")
@@ -409,7 +409,7 @@ function DF.BuildAuraBlacklistPage(guiRef, pageRef, dbRef)
     dropdownContainer:SetSize(280, 55)
     dropdownContainer:SetPoint("TOPLEFT", 10, -80)
 
-    local classLabel = dropdownContainer:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local classLabel = dropdownContainer:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     classLabel:SetPoint("TOPLEFT", 0, 0)
     classLabel:SetText(L["Class"])
     classLabel:SetTextColor(0.7, 0.7, 0.7)
@@ -435,7 +435,7 @@ function DF.BuildAuraBlacklistPage(guiRef, pageRef, dbRef)
     dropdownBtn:SetBackdropColor(0.12, 0.12, 0.12, 0.95)
     dropdownBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
 
-    local dropdownText = dropdownBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local dropdownText = dropdownBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     dropdownText:SetPoint("LEFT", 8, 0)
     dropdownText:SetPoint("RIGHT", -20, 0)
     dropdownText:SetJustifyH("LEFT")
@@ -497,7 +497,7 @@ function DF.BuildAuraBlacklistPage(guiRef, pageRef, dbRef)
         optBg:SetColorTexture(0, 0, 0, 0)
         optBtn._bg = optBg
 
-        local optText = optBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local optText = optBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         optText:SetPoint("LEFT", 8, 0)
         optText:SetText(opt.text)
 

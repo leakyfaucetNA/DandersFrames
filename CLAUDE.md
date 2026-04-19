@@ -18,6 +18,7 @@ DandersFrames is a custom party and raid frame addon for World of Warcraft (Reta
 - **Test mode exists** — when suggesting testing, remind that `/df test` or the test mode toggle can be used to simulate party/raid frames without being in a group.
 - **No AI attribution in commits.** Never add `Co-Authored-By` lines, Claude references, or any AI-related mentions in commit messages or code comments.
 - **`CHANGELOG.md` is the single source of truth for changelogs.** Always add new changelog entries to `CHANGELOG.md` — never edit `Changelog.lua` directly. CI generates `Changelog.lua` from `CHANGELOG.md` at build time via `generate_changelog.sh`. To update the local in-game changelog for testing, run `bash generate_changelog.sh` then restore side effects with `git checkout -- CHANGELOG.md DandersFrames.toc` (the script modifies these as a side effect). The `/bump-version` skill should add entries to `CHANGELOG.md`.
+- **Open bug awareness.** `_Reference/open-bugs.json` is a local cache of all currently triaged confirmed bugs (regenerated daily after the triage agent, or on demand via `/refresh-bugs`). When implementing fixes or features, you may optionally invoke `/check-bugs` to see if your changes touch files listed in open bug reports — useful for catching "this incidentally fixes bug X" moments or spotting bugs close to what you're working on. The release skills (`/release-alpha`, `/release-beta` manual path, `/release-stable`) run `/check-bugs` automatically before tagging so nothing ships without considering whether open bugs are now resolved.
 
 ## File Paths
 
@@ -65,6 +66,18 @@ Section headers:
 ```
 
 Use `DF:Debug()` / `DF:DebugWarn()` / `DF:DebugError()` — **never raw `print()`**. See `.claude/docs/debug-console.md` for full API reference.
+
+### Global name vs. `DF` local alias
+
+**Inside addon Lua files:** use `DF` (the local addon table from `local addonName, DF = ...`).
+
+**From chat / `/dump` / `/run` / macros / external callers:** use the full global `DandersFrames` (registered via `_G[addonName] = DF` in Core.lua). `DF` is a file-local, not a global — `/dump DF.foo` always errors with "attempt to index global 'DF' (a nil value)".
+
+When giving users in-game verification commands, always write `DandersFrames.X` not `DF.X`:
+```
+/dump DandersFrames.VersionCheck:RunComparatorTests()   -- works
+/dump DF.VersionCheck:RunComparatorTests()              -- fails (DF is nil globally)
+```
 
 ## Essential Patterns
 
@@ -212,6 +225,8 @@ Detailed reference docs are in `.claude/docs/`. Read the relevant module when wo
 | `/debug` | Scan bug reports in `_Reference/bugs/`, triage by severity, and propose fix plans |
 | `/fix-bug` | Fix a triaged bug from the Discord API, implement the fix, and push status back to the bot |
 | `/update-discord` | Mark fixed bugs on the Discord bot API after implementing fixes |
+| `/refresh-bugs` | Manually regenerate the local open bugs cache (`_Reference/open-bugs.json`) |
+| `/check-bugs` | Cross-reference recent changes against open bugs and prompt per-bug to mark any as fixed |
 | `/run-triage` | Manually trigger the daily triage agent |
 | `/triage-schedule` | View or change the daily triage schedule |
 | `/triage-logs` | Check latest triage agent logs and daily report |

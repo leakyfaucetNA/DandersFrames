@@ -108,31 +108,49 @@ function SoundEngine:StartLoop(auraName, soundCfg)
     local s = soundStates[auraName]
     if not s then return end
 
+    -- Re-read soundCfg fields on every tick so live GUI edits (sound, volume,
+    -- loop interval) take effect without requiring the user to disable and
+    -- re-enable the sound alert. soundCfg is a reference to the db table, so
+    -- field mutations from the Options panel are visible here.
+    local function tick()
+        -- Re-check global mute each tick. nil = default (enabled) — only an
+        -- explicit false means muted. Older profiles predate soundEnabled and
+        -- have nil, which would otherwise register as muted.
+        local mode = DF:GetCurrentMode()
+        local db = DF:GetDB(mode)
+        if not db or not db.auraDesigner or db.auraDesigner.soundEnabled == false then
+            self:TransitionTo(auraName, STATE_IDLE)
+            return
+        end
+
+        local soundFile = DF:GetSoundPath(soundCfg.soundLSMKey) or soundCfg.soundFile
+        local volume = soundCfg.volume or 0.8
+        if not soundFile or volume <= 0 then
+            self:TransitionTo(auraName, STATE_IDLE)
+            return
+        end
+
+        local _, h = self:PlayWithVolume(soundFile, volume)
+        s.lastHandle = h
+
+        -- Self-reschedule with the current interval so slider changes apply immediately
+        local interval = soundCfg.loopInterval or 3
+        s.ticker = C_Timer.NewTimer(interval, tick)
+    end
+
+    -- Initial play uses the same path to pick up any last-second config changes
     local soundFile = DF:GetSoundPath(soundCfg.soundLSMKey) or soundCfg.soundFile
     local volume = soundCfg.volume or 0.8
-    local interval = soundCfg.loopInterval or 3
-
     if not soundFile or volume <= 0 then
         self:TransitionTo(auraName, STATE_IDLE)
         return
     end
 
-    -- Play immediately on loop start
     local _, handle = self:PlayWithVolume(soundFile, volume)
     s.lastHandle = handle
 
-    -- Create repeating ticker
-    s.ticker = C_Timer.NewTicker(interval, function()
-        -- Re-check global mute each tick
-        local mode = DF:GetCurrentMode()
-        local db = DF:GetDB(mode)
-        if not db or not db.auraDesigner or not db.auraDesigner.soundEnabled then
-            self:TransitionTo(auraName, STATE_IDLE)
-            return
-        end
-        local _, h = self:PlayWithVolume(soundFile, volume)
-        s.lastHandle = h
-    end)
+    local interval = soundCfg.loopInterval or 3
+    s.ticker = C_Timer.NewTimer(interval, tick)
 end
 
 -- ============================================================
@@ -225,8 +243,8 @@ function SoundEngine:RunEvaluation()
 
     local adDB = db.auraDesigner
 
-    -- Global mute check
-    if not adDB.soundEnabled then
+    -- Global mute check. nil = default (enabled); only explicit false is muted.
+    if adDB.soundEnabled == false then
         self:StopAll()
         return
     end

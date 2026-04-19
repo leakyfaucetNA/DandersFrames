@@ -974,6 +974,19 @@ function DF:UpdateDefensiveIconAppearance(frame)
         ApplyOORAlpha(icon.borderBottom, inRange, alpha, oorAlpha)
         ApplyOORAlpha(icon.cooldown, inRange, alpha, oorAlpha)
         ApplyOORAlpha(icon.count, inRange, alpha, oorAlpha)
+
+        -- Additional defensive bar icons also need OOR alpha applied
+        if frame.defensiveBarIcons then
+            for _, extraIcon in pairs(frame.defensiveBarIcons) do
+                ApplyOORAlpha(extraIcon.texture, inRange, alpha, oorAlpha)
+                ApplyOORAlpha(extraIcon.borderLeft, inRange, alpha, oorAlpha)
+                ApplyOORAlpha(extraIcon.borderRight, inRange, alpha, oorAlpha)
+                ApplyOORAlpha(extraIcon.borderTop, inRange, alpha, oorAlpha)
+                ApplyOORAlpha(extraIcon.borderBottom, inRange, alpha, oorAlpha)
+                ApplyOORAlpha(extraIcon.cooldown, inRange, alpha, oorAlpha)
+                ApplyOORAlpha(extraIcon.count, inRange, alpha, oorAlpha)
+            end
+        end
     else
         if icon.texture then icon.texture:SetAlpha(alpha) end
         if icon.borderLeft then icon.borderLeft:SetAlpha(alpha) end
@@ -982,6 +995,19 @@ function DF:UpdateDefensiveIconAppearance(frame)
         if icon.borderBottom then icon.borderBottom:SetAlpha(alpha) end
         if icon.cooldown then icon.cooldown:SetAlpha(alpha) end
         if icon.count then icon.count:SetAlpha(alpha) end
+
+        -- Additional defensive bar icons also need alpha applied
+        if frame.defensiveBarIcons then
+            for _, extraIcon in pairs(frame.defensiveBarIcons) do
+                if extraIcon.texture then extraIcon.texture:SetAlpha(alpha) end
+                if extraIcon.borderLeft then extraIcon.borderLeft:SetAlpha(alpha) end
+                if extraIcon.borderRight then extraIcon.borderRight:SetAlpha(alpha) end
+                if extraIcon.borderTop then extraIcon.borderTop:SetAlpha(alpha) end
+                if extraIcon.borderBottom then extraIcon.borderBottom:SetAlpha(alpha) end
+                if extraIcon.cooldown then extraIcon.cooldown:SetAlpha(alpha) end
+                if extraIcon.count then extraIcon.count:SetAlpha(alpha) end
+            end
+        end
     end
 end
 

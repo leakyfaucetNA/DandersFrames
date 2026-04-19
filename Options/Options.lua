@@ -33,7 +33,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         btn.Icon:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\content_copy")
         
         -- Text
-        btn.Text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        btn.Text = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         btn.Text:SetPoint("LEFT", btn.Icon, "RIGHT", 4, 0)
         
         -- Sync toggle button
@@ -55,7 +55,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             linkBtn.Icon:SetSize(14, 14)
             linkBtn.Icon:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\refresh")
 
-            linkBtn.Text = linkBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            linkBtn.Text = linkBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             linkBtn.Text:SetPoint("LEFT", linkBtn.Icon, "RIGHT", 4, 0)
         end
 
@@ -277,50 +277,12 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         hidePlayer.hideOn = function() return GUI.SelectedMode == "raid" end
         hidePlayer.tooltip = L["Removes your player frame from the DandersFrames party display."]
 
-        Add(frameDisplayGroup, nil, 1)
-        
-        -- ===== BLIZZARD FRAMES GROUP (Column 2) =====
-        local blizzardGroup = GUI:CreateSettingsGroup(self.child, 280)
-        blizzardGroup:AddWidget(GUI:CreateHeader(self.child, L["Blizzard Frames"]), 40)
-        
-        local hideDefaultPlayer = blizzardGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Hide Blizzard Player Frame"], db, "hideDefaultPlayerFrame", function()
+        local hideDefaultPlayer = frameDisplayGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Hide Blizzard Player Frame"], db, "hideDefaultPlayerFrame", function()
             DF:UpdateDefaultPlayerFrame()
         end), 30)
         hideDefaultPlayer.tooltip = L["Hides the default Blizzard player portrait and health bar."]
-        
-        local hidePartyCheck = blizzardGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Hide Blizzard Party Frames"], db, "hideBlizzardPartyFrames", function()
-            DF:UpdateBlizzardFrameVisibility()
-        end), 30)
-        hidePartyCheck.hideOn = function() return GUI.SelectedMode == "raid" end
-        
-        local hideRaidCheck = blizzardGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Hide Blizzard Raid Frames"], db, "hideBlizzardRaidFrames", function()
-            DF:UpdateBlizzardFrameVisibility()
-        end), 30)
-        hideRaidCheck.hideOn = function() return GUI.SelectedMode == "party" end
-        
-        blizzardGroup:AddWidget(GUI:CreateLabel(self.child, L["Hides Blizzard frames but keeps them active for aura filtering."], 250), 40)
-        
-        local sideMenuCheck = blizzardGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Show Party/Raid Side Menu"], db, "showBlizzardSideMenu", function()
-            DF:UpdateBlizzardFrameVisibility()
-        end), 30)
-        sideMenuCheck.hideOn = function(d)
-            if GUI.SelectedMode == "raid" then
-                return not d.hideBlizzardRaidFrames
-            else
-                return not d.hideBlizzardPartyFrames
-            end
-        end
-        
-        local sideMenuLabel = blizzardGroup:AddWidget(GUI:CreateLabel(self.child, L["Shows the ping wheel & party management menu."], 250), 30)
-        sideMenuLabel.hideOn = function(d)
-            if GUI.SelectedMode == "raid" then
-                return not d.hideBlizzardRaidFrames
-            else
-                return not d.hideBlizzardPartyFrames
-            end
-        end
-        
-        Add(blizzardGroup, nil, 2)
+
+        Add(frameDisplayGroup, nil, 1)
     end)
     
     -- Display > Tooltips (moved from General)
@@ -1033,6 +995,236 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         Add(healthTextGroup, nil, 2)
     end)
     
+    -- General > Settings (mode enable/disable, Blizzard frame toggles, profile-wide settings)
+    local pageGeneral = CreateSubTab("general", "general_settings", L["Settings"])
+    BuildPage(pageGeneral, function(self, db, Add, AddSpace, AddSyncPoint)
+        -- Helpers: read from party-mode storage (canonical), write to BOTH
+        -- party and raid mode dbs so the value stays consistent regardless
+        -- of which mode is currently selected. The Blizzard frames are
+        -- global UI elements so the toggle conceptually has no mode.
+        local function makeBlizGet(key)
+            return function() return DF.db.party and DF.db.party[key] end
+        end
+        local function makeBlizSet(key, cb)
+            return function(val)
+                if DF.db.party then DF.db.party[key] = val end
+                if DF.db.raid  then DF.db.raid[key]  = val end
+                if cb then cb() end
+            end
+        end
+
+        -- Contextual reload popup shown when toggling DF Party/Raid frames.
+        -- Offers an optional third button that ALSO flips the matching
+        -- Blizzard hide flag, so "enabling" DF party also disables Blizzard
+        -- party (typical intent) and "disabling" DF party also enables
+        -- Blizzard party (so the user isn't left with no frames).
+        local function PromptReloadAfterModeToggle(mode)
+            if not DF:EnableFlagsDifferFromLoaded() then return end
+            if not DF.ShowPopupAlert then return end
+
+            -- NB: don't use `cond and a or b` here — the `a` result can be
+            -- false (when DF frames are disabled), which makes the `or`
+            -- fall through to the wrong mode's value.
+            local enabled
+            if mode == "party" then
+                enabled = DF.db.partyEnabled ~= false
+            else
+                enabled = DF.db.raidEnabled ~= false
+            end
+            local blizKey = (mode == "party") and "hideBlizzardPartyFrames" or "hideBlizzardRaidFrames"
+            local blizCurrentlyHidden = DF.db.party and DF.db.party[blizKey]
+
+            local buttons = {}
+            if enabled and not blizCurrentlyHidden then
+                -- Enabling DF frames while Blizzard frames are still visible
+                -- → offer to disable the Blizzard equivalent on the same reload
+                buttons[#buttons + 1] = {
+                    label = (mode == "party") and L["Reload & Disable Blizzard Party"] or L["Reload & Disable Blizzard Raid"],
+                    onClick = function()
+                        if DF.db.party then DF.db.party[blizKey] = true end
+                        if DF.db.raid  then DF.db.raid[blizKey]  = true end
+                        ReloadUI()
+                    end,
+                }
+            elseif (not enabled) and blizCurrentlyHidden then
+                -- Disabling DF frames while Blizzard frames are hidden
+                -- → offer to re-enable the Blizzard equivalent
+                buttons[#buttons + 1] = {
+                    label = (mode == "party") and L["Reload & Enable Blizzard Party"] or L["Reload & Enable Blizzard Raid"],
+                    onClick = function()
+                        if DF.db.party then DF.db.party[blizKey] = false end
+                        if DF.db.raid  then DF.db.raid[blizKey]  = false end
+                        ReloadUI()
+                    end,
+                }
+            end
+            buttons[#buttons + 1] = { label = L["Just Reload"], onClick = function() ReloadUI() end }
+            buttons[#buttons + 1] = { label = L["Reload Later"] }
+
+            DF:ShowPopupAlert({
+                title = L["Reload Required"],
+                message = L["Enabling or disabling a frame mode requires a UI reload to take effect.\n\nReload now?"],
+                width = 560,
+                buttonWidth = 170,
+                buttonHeight = 44,
+                buttons = buttons,
+            })
+        end
+
+        -- ===== INFO BANNER (global settings notice) =====
+        do
+            local banner = CreateFrame("Frame", nil, self.child, "BackdropTemplate")
+            banner:SetSize(560, 40)
+            if not banner.SetBackdrop then Mixin(banner, BackdropTemplateMixin) end
+            banner:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+            banner:SetBackdropColor(0.15, 0.18, 0.28, 1)
+            local tc = GUI.GetThemeColor and GUI.GetThemeColor() or {r = 0.45, g = 0.45, b = 0.95}
+            banner:SetBackdropBorderColor(tc.r, tc.g, tc.b, 0.5)
+
+            local icon = banner:CreateTexture(nil, "OVERLAY")
+            icon:SetPoint("LEFT", 10, 0)
+            icon:SetSize(16, 16)
+            icon:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\info")
+
+            local txt = banner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
+            txt:SetPoint("LEFT", icon, "RIGHT", 8, 0)
+            txt:SetPoint("RIGHT", banner, "RIGHT", -10, 0)
+            txt:SetJustifyH("LEFT")
+            txt:SetWordWrap(true)
+            txt:SetText(L["Settings on this page apply globally — changes persist across both the Party and Raid sections."])
+            txt:SetTextColor(0.85, 0.85, 0.85)
+
+            Add(banner, 44, "both")
+        end
+
+        -- ===== FRAME MODES GROUP (Column 1, Top) =====
+        local modesGroup = GUI:CreateSettingsGroup(self.child, 280)
+        modesGroup:AddWidget(GUI:CreateHeader(self.child, L["Frame Modes"]), 40)
+        modesGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Enable Party Frames"], DF.db, "partyEnabled", function() PromptReloadAfterModeToggle("party") end), 30)
+        modesGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Enable Raid Frames"], DF.db, "raidEnabled", function() PromptReloadAfterModeToggle("raid") end), 30)
+        modesGroup:AddWidget(GUI:CreateLabel(self.child,
+            L["Completely enable or disable the Party or Raid frame system. Disabled modes are never created, consuming zero performance in the background. Requires a UI reload to apply."],
+            260), 80)
+        Add(modesGroup, nil, 1)
+
+        -- ===== BLIZZARD FRAMES GROUP (Column 1, Bottom) =====
+        -- Storage stays per-mode (party + raid both updated via setter sync)
+        -- so AutoProfiles and ExportCategories continue to work unchanged.
+        local blizzardGroup = GUI:CreateSettingsGroup(self.child, 280)
+        blizzardGroup:AddWidget(GUI:CreateHeader(self.child, L["Blizzard Frames"]), 40)
+
+        local disablePartyCheck = blizzardGroup:AddWidget(GUI:CreateCheckbox(
+            self.child, L["Disable Blizzard Party Frames"],
+            DF.db.party, "hideBlizzardPartyFrames",
+            function() DF:UpdateBlizzardFrameVisibility() end,
+            makeBlizGet("hideBlizzardPartyFrames"),
+            makeBlizSet("hideBlizzardPartyFrames", function() DF:UpdateBlizzardFrameVisibility() end)
+        ), 30)
+        disablePartyCheck.tooltip = L["Hides and unregisters all events on the default Blizzard party frames so they consume no performance."]
+
+        local disableRaidCheck = blizzardGroup:AddWidget(GUI:CreateCheckbox(
+            self.child, L["Disable Blizzard Raid Frames"],
+            DF.db.party, "hideBlizzardRaidFrames",
+            function() DF:UpdateBlizzardFrameVisibility() end,
+            makeBlizGet("hideBlizzardRaidFrames"),
+            makeBlizSet("hideBlizzardRaidFrames", function() DF:UpdateBlizzardFrameVisibility() end)
+        ), 30)
+        disableRaidCheck.tooltip = L["Hides and unregisters all events on the default Blizzard raid frames so they consume no performance."]
+
+        -- Visual divider + small caption to separate the related sub-option
+        -- (Show Side Menu only applies once a Blizzard frame is disabled)
+        local divider = CreateFrame("Frame", nil, self.child)
+        divider:SetSize(260, 1)
+        local dividerTex = divider:CreateTexture(nil, "OVERLAY")
+        dividerTex:SetColorTexture(1, 1, 1, 0.08)
+        dividerTex:SetPoint("LEFT", 0, 0)
+        dividerTex:SetPoint("RIGHT", 0, 0)
+        dividerTex:SetHeight(1)
+        blizzardGroup:AddWidget(divider, 14)
+
+        local sideMenuCheck = blizzardGroup:AddWidget(GUI:CreateCheckbox(
+            self.child, L["Show Party/Raid Side Menu"],
+            DF.db.party, "showBlizzardSideMenu",
+            function() DF:UpdateBlizzardFrameVisibility() end,
+            makeBlizGet("showBlizzardSideMenu"),
+            makeBlizSet("showBlizzardSideMenu", function() DF:UpdateBlizzardFrameVisibility() end)
+        ), 30)
+        sideMenuCheck.disableOn = function()
+            local p = DF.db.party
+            return not (p and (p.hideBlizzardPartyFrames or p.hideBlizzardRaidFrames))
+        end
+        sideMenuCheck.tooltip = L["Shows the ping wheel & party management menu when Blizzard frames are disabled."]
+
+        Add(blizzardGroup, nil, 1)
+
+        -- ===== SETTINGS PANEL APPEARANCE GROUP (Column 2, Top) =====
+        -- Controls the look of this settings panel itself — does NOT affect
+        -- in-game frame text (use Health Text / Name Text pages for those).
+        local outlineValues = {
+            [""]          = L["None"],
+            OUTLINE       = L["Outline"],
+            THICKOUTLINE  = L["Thick Outline"],
+            MONOCHROME    = L["Monochrome"],
+        }
+        local appearanceGroup = GUI:CreateSettingsGroup(self.child, 280)
+        appearanceGroup:AddWidget(GUI:CreateHeader(self.child, L["Settings Panel Appearance"]), 40)
+        appearanceGroup:AddWidget(GUI:CreateFontDropdown(self.child, L["Settings Font"], DF.db, "settingsFont", function()
+            if GUI.RefreshSettingsFont then GUI:RefreshSettingsFont() end
+        end), 55)
+        appearanceGroup:AddWidget(GUI:CreateDropdown(self.child, L["Settings Font Outline"], outlineValues, DF.db, "settingsFontOutline", function()
+            if GUI.RefreshSettingsFont then GUI:RefreshSettingsFont() end
+        end), 55)
+        appearanceGroup:AddWidget(GUI:CreateLabel(self.child,
+            L["Font used for this settings panel. Does not affect in-game frame text — use the Health Text, Name Text, and Status Text pages for those."],
+            260), 60)
+        Add(appearanceGroup, nil, 2)
+
+        -- ===== LANGUAGE GROUP (Column 2, Bottom) =====
+        local languageValues = {
+            AUTO  = L["Auto (use client language)"],
+            enUS  = "English",
+            deDE  = "Deutsch",
+            esES  = "Español (ES)",
+            esMX  = "Español (MX)",
+            frFR  = "Français",
+            itIT  = "Italiano",
+            koKR  = "한국어",
+            ptBR  = "Português (BR)",
+            ruRU  = "Русский",
+            zhCN  = "中文 (简体)",
+            zhTW  = "中文 (繁體)",
+        }
+        local languageGroup = GUI:CreateSettingsGroup(self.child, 280)
+        languageGroup:AddWidget(GUI:CreateHeader(self.child, L["Language"]), 40)
+        -- Language override lives on the per-character SavedVariable so
+        -- locale files can read it at file-load time (before DF.db exists).
+        languageGroup:AddWidget(GUI:CreateDropdown(self.child, L["Addon Language"], languageValues, DandersFramesCharDB, "languageOverride", function()
+            if DF.ShowPopupAlert then
+                DF:ShowPopupAlert({
+                    title = L["Reload Required"],
+                    message = L["Changing the addon language requires a UI reload to take effect.\n\nReload now?"],
+                    buttons = {
+                        { label = L["Reload Now"], onClick = function() ReloadUI() end },
+                        { label = L["Later"] },
+                    },
+                })
+            end
+        end), 55)
+        languageGroup:AddWidget(GUI:CreateLabel(self.child,
+            L["Override the addon's display language. Auto follows your WoW client language. Translations are community-contributed and may be incomplete."],
+            260), 60)
+        Add(languageGroup, nil, 2)
+
+        -- ===== NOTIFICATIONS GROUP (Column 2, Bottom) =====
+        local notificationsGroup = GUI:CreateSettingsGroup(self.child, 280)
+        notificationsGroup:AddWidget(GUI:CreateHeader(self.child, L["Notifications"]), 40)
+        notificationsGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Notify me when a newer version is available"],
+            DF:GetGlobalDB(), "notifyOutdated", function()
+                -- Setting applies immediately; no extra callback needed.
+            end), 30)
+        Add(notificationsGroup, nil, 2)
+    end)
+
     -- General > Frame
     local pageFrame = CreateSubTab("general", "general_frame", L["Frame"])
     BuildPage(pageFrame, function(self, db, Add, AddSpace, AddSyncPoint)
@@ -1452,7 +1644,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         applyBtn:SetBackdropColor(0.18, 0.18, 0.18, 1)
         applyBtn:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
         
-        applyBtn.text = applyBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        applyBtn.text = applyBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         applyBtn.text:SetPoint("CENTER", 0, 0)
         applyBtn.text:SetText(L["Apply to All"])
         applyBtn.text:SetTextColor(0.9, 0.9, 0.9, 1)
@@ -1692,18 +1884,27 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                 if set.showLabel == nil then set.showLabel = false end
                 if set.players == nil then set.players = {} end
                 if set.manualPlayers == nil then set.manualPlayers = {} end
+                if set.frameType == nil then set.frameType = "player" end
             end
         end
         
-        -- Current active tab
-        local activeHighlightTab = 1
+        -- Current active tab (persist across page refreshes so switching tabs
+        -- between sets with different frameTypes — which calls RefreshCurrentPage —
+        -- doesn't snap back to tab 1)
+        pagePinnedFrames.persistedTab = pagePinnedFrames.persistedTab or 1
+        local activeHighlightTab = pagePinnedFrames.persistedTab
         local tabButtons = {}
         local controlsToRefresh = {}
         
         local function GetCurrentSet()
             return db.pinnedFrames.sets[activeHighlightTab]
         end
-        
+
+        local function IsCurrentBossMode()
+            local s = GetCurrentSet()
+            return s and s.frameType == "friendlyBoss"
+        end
+
         local function RefreshControls()
             for _, ctrl in ipairs(controlsToRefresh) do
                 if ctrl.Refresh then ctrl:Refresh() end
@@ -1746,10 +1947,25 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             tab:SetSize(120, 28)
             tab:SetPoint("LEFT", tabContainer, "LEFT", (i - 1) * 124, 0)
             tab:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-            tab.text = tab:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            tab.text = tab:CreateFontString(nil, "OVERLAY", "DFFontNormal")
             tab.text:SetPoint("CENTER")
             tab.text:SetText(L["Highlight"] .. " " .. i)
-            tab:SetScript("OnClick", function() activeHighlightTab = i; RefreshTabs(); RefreshControls(); if GUI.RefreshAllOverrideIndicators then GUI.RefreshAllOverrideIndicators() end end)
+            tab:SetScript("OnClick", function()
+                local oldSet = GetCurrentSet()
+                local oldType = oldSet and oldSet.frameType
+                activeHighlightTab = i
+                pagePinnedFrames.persistedTab = i
+                local newSet = GetCurrentSet()
+                local newType = newSet and newSet.frameType
+                RefreshTabs()
+                if oldType ~= newType and GUI.RefreshCurrentPage then
+                    -- Frame type differs between tabs — rebuild page to show/hide boss vs player controls
+                    GUI.RefreshCurrentPage()
+                else
+                    RefreshControls()
+                    if GUI.RefreshAllOverrideIndicators then GUI.RefreshAllOverrideIndicators() end
+                end
+            end)
             tab:SetScript("OnEnter", function(s) if activeHighlightTab ~= i then s:SetBackdropBorderColor(0.4, 0.4, 0.4, 1); s.text:SetTextColor(0.7, 0.7, 0.7) end end)
             tab:SetScript("OnLeave", function() RefreshTabs() end)
             tabButtons[i] = tab
@@ -1835,7 +2051,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             container.overrideStar = starFrame
             
             -- Global value text
-            local globalText = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local globalText = container:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             globalText:SetPoint("LEFT", lbl, "RIGHT", 4, 0)
             globalText:SetTextColor(0.4, 0.4, 0.4)
             globalText:Hide()
@@ -1977,7 +2193,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             cb.Check:SetPoint("CENTER")
             cb.Check:SetSize(10, 10)
             cb:SetCheckedTexture(cb.Check)
-            local txt = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local txt = container:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             txt:SetPoint("LEFT", cb, "RIGHT", 8, 0)
             txt:SetText(label)
             txt:SetTextColor(0.8, 0.8, 0.8)
@@ -2023,7 +2239,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         local function CreateRefreshableSlider(parent, label, minVal, maxVal, step, dbKey, callback)
             local container = CreateFrame("Frame", nil, parent)
             container:SetSize(250, 50)
-            local lbl = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local lbl = container:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             lbl:SetPoint("TOPLEFT", 0, 0)
             lbl:SetText(label)
             lbl:SetTextColor(0.8, 0.8, 0.8)
@@ -2056,7 +2272,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             input:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
             input:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
             input:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
-            input:SetFontObject(GameFontHighlightSmall)
+            input:SetFontObject(DFFontHighlightSmall)
             input:SetJustifyH("CENTER")
             input:SetAutoFocus(false)
             input:SetTextInsets(2, 2, 0, 0)
@@ -2134,7 +2350,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         local function CreateRefreshableDropdown(parent, label, options, dbKey, callback)
             local wrapper = CreateFrame("Frame", nil, parent)
             wrapper:SetSize(250, 50)
-            local lbl = wrapper:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local lbl = wrapper:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             lbl:SetPoint("TOPLEFT", 0, 0)
             lbl:SetText(label)
             lbl:SetTextColor(0.8, 0.8, 0.8)
@@ -2144,7 +2360,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             btn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
             btn:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
             btn:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
-            btn.Text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            btn.Text = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             btn.Text:SetPoint("LEFT", 8, 0)
             btn.Text:SetPoint("RIGHT", -20, 0)
             btn.Text:SetJustifyH("LEFT")
@@ -2172,7 +2388,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                 menuBtn:SetPoint("TOPLEFT", 2, -2 - (idx - 1) * 22)
                 menuBtn:SetPoint("TOPRIGHT", -2, -2 - (idx - 1) * 22)
                 menuBtn:SetHeight(22)
-                menuBtn.Text = menuBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                menuBtn.Text = menuBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
                 menuBtn.Text:SetPoint("LEFT", 8, 0)
                 menuBtn.Text:SetText(opt.value)
                 menuBtn.Text:SetTextColor(0.8, 0.8, 0.8)
@@ -2230,6 +2446,8 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             if DF.PinnedFrames then
                 DF.PinnedFrames:ApplyLayoutSettings(activeHighlightTab)
                 DF.PinnedFrames:ResizeContainer(activeHighlightTab)
+                -- If a preview container is active for the edited mode, keep it in sync
+                DF.PinnedFrames:UpdatePreviewSet(activeHighlightTab)
             end
         end
         
@@ -2254,14 +2472,36 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         local settingsGroup = GUI:CreateSettingsGroup(self.child, 280)
         settingsGroup:AddWidget(GUI:CreateHeader(self.child, L["Settings"]), 40)
         
+        -- SetEnabled / SetLocked / SetShowLabel internally use GetSetDB → IsInRaid(),
+        -- so calling them while editing the inactive mode would mutate the active
+        -- mode's state. Only call them when the selected mode matches the live mode;
+        -- otherwise the DB write from the checkbox itself is enough and the preview
+        -- reflects the change.
+        local function IsEditingActiveMode()
+            local actualMode = IsInRaid() and "raid" or "party"
+            return GUI.SelectedMode == actualMode
+        end
+
         settingsGroup:AddWidget(CreateRefreshableCheckbox(self.child, L["Enable"], "enabled", function()
-            if DF.PinnedFrames then DF.PinnedFrames:SetEnabled(activeHighlightTab, GetCurrentSet().enabled) end
+            if not DF.PinnedFrames then return end
+            if IsEditingActiveMode() then
+                DF.PinnedFrames:SetEnabled(activeHighlightTab, GetCurrentSet().enabled)
+            end
+            DF.PinnedFrames:UpdatePreviewSet(activeHighlightTab)
         end), 28)
         settingsGroup:AddWidget(CreateRefreshableCheckbox(self.child, L["Lock Position"], "locked", function()
-            if DF.PinnedFrames then DF.PinnedFrames:SetLocked(activeHighlightTab, GetCurrentSet().locked) end
+            if not DF.PinnedFrames then return end
+            if IsEditingActiveMode() then
+                DF.PinnedFrames:SetLocked(activeHighlightTab, GetCurrentSet().locked)
+            end
+            DF.PinnedFrames:UpdatePreviewSet(activeHighlightTab)
         end), 28)
         settingsGroup:AddWidget(CreateRefreshableCheckbox(self.child, L["Show Label"], "showLabel", function()
-            if DF.PinnedFrames then DF.PinnedFrames:SetShowLabel(activeHighlightTab, GetCurrentSet().showLabel) end
+            if not DF.PinnedFrames then return end
+            if IsEditingActiveMode() then
+                DF.PinnedFrames:SetShowLabel(activeHighlightTab, GetCurrentSet().showLabel)
+            end
+            DF.PinnedFrames:UpdatePreviewSet(activeHighlightTab)
         end), 28)
 
         -- Reset Position button
@@ -2270,23 +2510,29 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         resetPosBtn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
         resetPosBtn:SetBackdropColor(0.15, 0.15, 0.15, 0.9)
         resetPosBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
-        local resetPosText = resetPosBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local resetPosText = resetPosBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         resetPosText:SetPoint("CENTER")
         resetPosText:SetText(L["Reset Position"])
         resetPosBtn:SetScript("OnClick", function()
             local set = GetCurrentSet()
-            if set and DF.PinnedFrames then
+            if not set or not DF.PinnedFrames then return end
+
+            -- Reset position in the edited (selected) mode's DB
+            set.position = { point = "CENTER", x = 0, y = 0 }
+
+            -- Apply to the real container only if editing the actual mode
+            local actualMode = IsInRaid() and "raid" or "party"
+            if GUI.SelectedMode == actualMode then
                 local container = DF.PinnedFrames.containers[activeHighlightTab]
                 if container then
-                    -- Reset to screen center using CENTER anchor, then let layout convert
                     container:ClearAllPoints()
                     container:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
-                    -- Save with the current growth anchor using the converted position
-                    set.position = { point = "CENTER", x = 0, y = 0 }
-                    -- Now apply layout which will convert CENTER to the growth anchor
                     DF.PinnedFrames:ApplyLayoutSettings(activeHighlightTab)
                 end
             end
+
+            -- Keep the preview in sync if one is active for the edited mode
+            DF.PinnedFrames:UpdatePreviewSet(activeHighlightTab)
         end)
         resetPosBtn:SetScript("OnEnter", function(self)
             self:SetBackdropColor(0.25, 0.25, 0.25, 0.9)
@@ -2299,7 +2545,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         -- Label name input
         local nameInputContainer = CreateFrame("Frame", nil, self.child)
         nameInputContainer:SetSize(250, 44)
-        local nameLabel = nameInputContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local nameLabel = nameInputContainer:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         nameLabel:SetPoint("TOPLEFT", 0, 0)
         nameLabel:SetText(L["Label Name"])
         nameLabel:SetTextColor(0.8, 0.8, 0.8)
@@ -2309,7 +2555,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         nameInput:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
         nameInput:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
         nameInput:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
-        nameInput:SetFontObject(GameFontHighlight)
+        nameInput:SetFontObject(DFFontHighlight)
         nameInput:SetTextInsets(8, 8, 0, 0)
         nameInput:SetAutoFocus(false)
         nameInput:SetMaxLetters(30)
@@ -2318,7 +2564,11 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         nameInput:SetScript("OnEditFocusLost", function(s)
             GetCurrentSet().name = s:GetText()
             RefreshTabs()
-            if DF.PinnedFrames then DF.PinnedFrames:UpdateLabel(activeHighlightTab) end
+            if DF.PinnedFrames then
+                DF.PinnedFrames:UpdateLabel(activeHighlightTab)
+                -- Refresh preview label text too if a preview is active
+                DF.PinnedFrames:UpdatePreviewSet(activeHighlightTab)
+            end
         end)
         nameInputContainer.Refresh = function() nameInput:SetText(GetCurrentSet().name or "") end
         table.insert(controlsToRefresh, nameInputContainer)
@@ -2326,6 +2576,30 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         
         Add(settingsGroup, nil, 1)
         
+        -- ===== FRAME TYPE GROUP (full width) =====
+        local frameTypeGroup = GUI:CreateSettingsGroup(self.child, 560)
+        frameTypeGroup:AddWidget(GUI:CreateHeader(self.child, L["Frame Type"]), 40)
+
+        local frameTypeOptions = {
+            player = L["Player Frames"],
+            friendlyBoss = L["Friendly Boss NPCs"],
+        }
+
+        local function OnFrameTypeChanged()
+            if not DF.PinnedFrames then return end
+            if InCombatLockdown() then return end
+            DF.PinnedFrames:Reinitialize()
+            if GUI.RefreshCurrentPage then GUI.RefreshCurrentPage() end
+        end
+
+        frameTypeGroup:AddWidget(
+            CreateRefreshableDropdown(self.child, L["Frame Type"], frameTypeOptions, "frameType", OnFrameTypeChanged),
+            55
+        )
+
+        Add(frameTypeGroup, nil, "both")
+        AddSpace(10, "both")
+
         -- ===== LAYOUT GROUP (Column 2) =====
         local layoutGroup = GUI:CreateSettingsGroup(self.child, 280)
         layoutGroup:AddWidget(GUI:CreateHeader(self.child, L["Layout"]), 40)
@@ -2351,11 +2625,12 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         spacingGroup:AddWidget(CreateRefreshableSlider(self.child, L["Vertical Spacing"], -5, 50, 1, "verticalSpacing", UpdateHighlightLayout), 55)
         Add(spacingGroup, nil, 1)
         
+        if not IsCurrentBossMode() then
         -- ===== AUTO-POPULATE GROUP (Column 2) =====
         local autoPopGroup = GUI:CreateSettingsGroup(self.child, 280)
         autoPopGroup:AddWidget(GUI:CreateHeader(self.child, L["Auto-Populate"]), 40)
         autoPopGroup:AddWidget(GUI:CreateLabel(self.child, L["Automatically add players by role when they join your group."], 250), 30)
-        
+
         autoPopGroup:AddWidget(CreateRefreshableCheckbox(self.child, L["Auto-add Tanks"], "autoAddTanks", function()
             if GetCurrentSet().autoAddTanks and DF.PinnedFrames then
                 DF.PinnedFrames:AutoPopulateSet(GetCurrentSet())
@@ -2381,20 +2656,22 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             end
         end), 28)
         autoPopGroup:AddWidget(CreateRefreshableCheckbox(self.child, L["Keep when offline/left"], "keepOfflinePlayers", function() end), 28)
-        
+
         Add(autoPopGroup, nil, 2)
+        end -- not IsCurrentBossMode
         
+        if not IsCurrentBossMode() then
         -- ===== UNIT SELECTION (full width) =====
         AddSpace(10, "both")
-        
+
         -- Unit Selection header with override indicator
         unitSelHeader = CreateFrame("Frame", nil, self.child)
         unitSelHeader:SetSize(500, 40)
-        local unitSelTitle = unitSelHeader:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local unitSelTitle = unitSelHeader:CreateFontString(nil, "OVERLAY", "DFFontNormal")
         unitSelTitle:SetPoint("LEFT", 0, 0)
         unitSelTitle:SetText(L["Unit Selection"])
         unitSelTitle:SetTextColor(1, 1, 1)
-        
+
         -- Override indicator for players list (header-level)
         AddPinnedOverrideIndicators(unitSelHeader, unitSelTitle, "players", function()
             local AutoProfilesUI = DF.AutoProfilesUI
@@ -2408,9 +2685,9 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         unitSelHeader.Refresh = function(self)
             if self.UpdateOverrideIndicators then self:UpdateOverrideIndicators() end
         end
-        
+
         Add(unitSelHeader, 40, "both")
-        
+
         rosterWidget = GUI:CreateHighlightRosterWidget(
             self.child,
             function() return GetCurrentSet().players end,
@@ -2438,7 +2715,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                 if DF.PinnedFrames then DF.PinnedFrames:UpdateHeaderNameList(activeHighlightTab) end
             end
         )
-        
+
         local originalRefresh = rosterWidget.Refresh
         rosterWidget.Refresh = function(s)
             if originalRefresh then originalRefresh(s) end
@@ -2447,10 +2724,24 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         table.insert(controlsToRefresh, rosterWidget)
         table.insert(controlsToRefresh, unitSelHeader)
         Add(rosterWidget, 340, "both")
-        
+        end -- not IsCurrentBossMode
+
         RefreshControls()
+
+        -- Show preview containers if editing a non-active mode
+        -- (e.g. raid settings while actually in a party): lets the user
+        -- position/scale the pinned frames for that mode without being in it.
+        if DF.PinnedFrames then
+            DF.PinnedFrames:ShowPreview(GUI.SelectedMode)
+        end
     end)
-    
+
+    pagePinnedFrames:SetScript("OnHide", function()
+        if DF.PinnedFrames then
+            DF.PinnedFrames:HidePreview()
+        end
+    end)
+
     -- General > Sorting
     local pageSorting = CreateSubTab("general", "general_sorting", L["Sorting"])
     BuildPage(pageSorting, function(self, db, Add, AddSpace, AddSyncPoint)
@@ -2501,7 +2792,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         combatBannerIcon:SetSize(20, 20)
         combatBannerIcon:SetPoint("LEFT", 12, 0)
         
-        local combatBannerText = combatBanner:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local combatBannerText = combatBanner:CreateFontString(nil, "OVERLAY", "DFFontNormal")
         combatBannerText:SetPoint("LEFT", combatBannerIcon, "RIGHT", 8, 0)
         combatBannerText:SetPoint("RIGHT", -12, 0)
         combatBannerText:SetJustifyH("LEFT")
@@ -2797,7 +3088,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         })
         resetAllBtn:SetBackdropColor(0.15, 0.15, 0.15, 1)
         resetAllBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
-        local resetAllText = resetAllBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local resetAllText = resetAllBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         resetAllText:SetPoint("CENTER")
         resetAllText:SetText(L["Reset All to Default"])
         resetAllBtn:SetScript("OnClick", function()
@@ -3233,7 +3524,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         })
         resetPowerBtn:SetBackdropColor(0.15, 0.15, 0.15, 1)
         resetPowerBtn:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
-        local resetPowerText = resetPowerBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local resetPowerText = resetPowerBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         resetPowerText:SetPoint("CENTER")
         resetPowerText:SetText(L["Reset All to Default"])
         resetPowerBtn:SetScript("OnClick", function()
@@ -3842,7 +4133,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             bannerIcon:SetSize(20, 20)
             bannerIcon:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\help")
 
-            local bannerText = banner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local bannerText = banner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             bannerText:SetPoint("LEFT", bannerIcon, "RIGHT", 8, 0)
             bannerText:SetPoint("RIGHT", banner, "RIGHT", -110, 0)
             bannerText:SetText(L["Having trouble with buffs or debuffs? Run the setup wizard for guided help."])
@@ -3890,7 +4181,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             -- Helper to create an inline clickable link
             local function CreateInlineLink(parent, text, pageId)
                 local btn = CreateFrame("Button", nil, parent)
-                local fs = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                local fs = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
                 fs:SetAllPoints()
                 fs:SetText(text)
                 local c = GUI.GetThemeColor()
@@ -3908,7 +4199,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             end
 
             -- Line 1: "Aura Filters only affect the [Buff Bar] and [Debuff Bar]."
-            local t1 = infoBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local t1 = infoBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             t1:SetPoint("TOPLEFT", infoIcon, "TOPRIGHT", 8, 2)
             t1:SetText(L["Aura Filters only affect the"])
             t1:SetTextColor(0.85, 0.85, 0.85)
@@ -3916,7 +4207,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             local linkBuff = CreateInlineLink(infoBanner, L["Buff Bar"], "auras_buffs")
             linkBuff:SetPoint("LEFT", t1, "RIGHT", 3, 0)
 
-            local t2 = infoBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local t2 = infoBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             t2:SetPoint("LEFT", linkBuff, "RIGHT", 3, 0)
             t2:SetText(L["and"])
             t2:SetTextColor(0.85, 0.85, 0.85)
@@ -3924,13 +4215,13 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             local linkDebuff = CreateInlineLink(infoBanner, L["Debuff Bar"], "auras_debuffs")
             linkDebuff:SetPoint("LEFT", t2, "RIGHT", 3, 0)
 
-            local t2b = infoBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local t2b = infoBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             t2b:SetPoint("LEFT", linkDebuff, "RIGHT", 0, 0)
             t2b:SetText(".")
             t2b:SetTextColor(0.85, 0.85, 0.85)
 
             -- Line 2: "Auras displayed in the [Dispel Overlay], [Defensive Icon], and [Aura Designer] are independent."
-            local t3 = infoBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local t3 = infoBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             t3:SetPoint("TOPLEFT", t1, "BOTTOMLEFT", 0, -4)
             t3:SetText(L["Auras displayed in the"])
             t3:SetTextColor(0.85, 0.85, 0.85)
@@ -3938,7 +4229,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             local linkDispel = CreateInlineLink(infoBanner, L["Dispel Overlay"], "auras_dispel")
             linkDispel:SetPoint("LEFT", t3, "RIGHT", 3, 0)
 
-            local t4 = infoBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local t4 = infoBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             t4:SetPoint("LEFT", linkDispel, "RIGHT", 0, 0)
             t4:SetText(",")
             t4:SetTextColor(0.85, 0.85, 0.85)
@@ -3946,7 +4237,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             local linkDef = CreateInlineLink(infoBanner, L["Defensive Icon"], "auras_defensiveicon")
             linkDef:SetPoint("LEFT", t4, "RIGHT", 3, 0)
 
-            local t5 = infoBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local t5 = infoBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             t5:SetPoint("LEFT", linkDef, "RIGHT", 0, 0)
             t5:SetText(",")
             t5:SetTextColor(0.85, 0.85, 0.85)
@@ -3954,7 +4245,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             local linkAD = CreateInlineLink(infoBanner, L["Aura Designer"], "auras_auradesigner")
             linkAD:SetPoint("LEFT", t5, "RIGHT", 3, 0)
 
-            local t5b = infoBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local t5b = infoBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             t5b:SetPoint("LEFT", linkAD, "RIGHT", 0, 0)
             t5b:SetText(", " .. L["and"])
             t5b:SetTextColor(0.85, 0.85, 0.85)
@@ -3962,7 +4253,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             local linkBoss = CreateInlineLink(infoBanner, L["Boss Debuffs"], "auras_bossdebuffs")
             linkBoss:SetPoint("LEFT", t5b, "RIGHT", 3, 0)
 
-            local t6 = infoBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local t6 = infoBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             t6:SetPoint("LEFT", linkBoss, "RIGHT", 3, 0)
             t6:SetText(L["are independent of Aura Filters."])
             t6:SetTextColor(0.85, 0.85, 0.85)
@@ -4112,7 +4403,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         debuffWarningIcon:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\warning")
         debuffWarningIcon:SetVertexColor(1, 0.9, 0.3)
 
-        local debuffWarningText = debuffWarningBanner:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        local debuffWarningText = debuffWarningBanner:CreateFontString(nil, "OVERLAY", "DFFontNormal")
         debuffWarningText:SetPoint("LEFT", debuffWarningIcon, "RIGHT", 8, 0)
         debuffWarningText:SetPoint("RIGHT", -12, 0)
         debuffWarningText:SetJustifyH("LEFT")
@@ -4199,14 +4490,14 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         adBanner:SetBackdropColor(0.14, 0.14, 0.14, 1)
         adBanner:SetBackdropBorderColor(0.30, 0.30, 0.30, 0.5)
 
-        local adBannerText = adBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local adBannerText = adBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         adBannerText:SetPoint("LEFT", 10, 0)
         adBannerText:SetTextColor(0.6, 0.6, 0.6)
 
         local adBannerLinkBtn = CreateFrame("Button", nil, adBanner)
         adBannerLinkBtn:SetSize(120, 18)
         adBannerLinkBtn:SetPoint("LEFT", adBannerText, "RIGHT", 8, 0)
-        local adBannerLinkText = adBannerLinkBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local adBannerLinkText = adBannerLinkBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         adBannerLinkText:SetAllPoints()
         adBannerLinkText:SetText(L["Open Aura Designer"])
         local tc = GUI.GetThemeColor()
@@ -4224,7 +4515,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         local enableBuffsBtn = CreateFrame("Button", nil, adBanner)
         enableBuffsBtn:SetSize(85, 18)
         enableBuffsBtn:SetPoint("LEFT", adBannerText, "RIGHT", 8, 0)
-        local enableBuffsText = enableBuffsBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local enableBuffsText = enableBuffsBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         enableBuffsText:SetAllPoints()
         enableBuffsText:SetText(L["Enable Buffs"])
         enableBuffsText:SetTextColor(tc.r, tc.g, tc.b)
@@ -4689,13 +4980,13 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             bdIcon:SetSize(18, 18)
             bdIcon:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\info")
 
-            local bdText = bdBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local bdText = bdBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             bdText:SetPoint("LEFT", bdIcon, "RIGHT", 8, 0)
             bdText:SetText(L["Boss Debuffs cannot trigger"])
             bdText:SetTextColor(0.85, 0.85, 0.85)
 
             local bdLink = CreateFrame("Button", nil, bdBanner)
-            local bdLinkText = bdLink:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local bdLinkText = bdLink:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             bdLinkText:SetAllPoints()
             bdLinkText:SetText(L["Dispel Overlays"])
             bdLinkText:SetTextColor(tc.r, tc.g, tc.b)
@@ -4710,7 +5001,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                 if GUI.SelectTab then GUI.SelectTab("auras_dispel") end
             end)
 
-            local bdSuffix = bdBanner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local bdSuffix = bdBanner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             bdSuffix:SetPoint("LEFT", bdLink, "RIGHT", 3, 0)
             bdSuffix:SetText(L["on frames."])
             bdSuffix:SetTextColor(0.85, 0.85, 0.85)
@@ -4813,7 +5104,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         -- Stack text warning note + "Show me" button container
         local stackNoteContainer = CreateFrame("Frame", nil, self.child)
         stackNoteContainer:SetSize(250, 55)
-        local stackNoteLabel = stackNoteContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local stackNoteLabel = stackNoteContainer:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
         stackNoteLabel:SetPoint("TOPLEFT", stackNoteContainer, "TOPLEFT", 0, 0)
         stackNoteLabel:SetWidth(250)
         stackNoteLabel:SetJustifyH("LEFT")
@@ -4825,7 +5116,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         showMeBtn:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
         showMeBtn:SetBackdropColor(0.15, 0.15, 0.15, 0.9)
         showMeBtn:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
-        local showMeText = showMeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local showMeText = showMeBtn:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
         showMeText:SetPoint("CENTER")
         showMeText:SetText("|cFFFFFF00Show me|r")
         showMeBtn:SetScript("OnClick", function()
@@ -4855,6 +5146,11 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         sizeGroup.hideOn = HideBossDebuffOptions
         Add(sizeGroup, nil, 1)
 
+        -- Version detection for container overlay support
+        local CLIENT_VERSION = select(4, GetBuildInfo())
+        local IS_CONTAINER_SUPPORTED = CLIENT_VERSION >= 120005
+
+        if not IS_CONTAINER_SUPPORTED then
         -- ===== FRAME BORDER OVERLAY GROUP (Column 2) =====
         local overlayGroup = GUI:CreateSettingsGroup(self.child, 280)
         overlayGroup:AddWidget(GUI:CreateHeader(self.child, L["Frame Border Overlay"]), 40)
@@ -4938,6 +5234,58 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         ovWizard.hideOn = function(d) return not d.bossDebuffsEnabled end
         overlayGroup.hideOn = HideBossDebuffOptions
         Add(overlayGroup, nil, 2)
+        end -- not IS_CONTAINER_SUPPORTED
+
+        if IS_CONTAINER_SUPPORTED then
+        -- ===== CONTAINER DISPEL OVERLAY GROUP (Column 2, 12.0.5+ only) =====
+        local containerGroup = GUI:CreateSettingsGroup(self.child, 280)
+        containerGroup:AddWidget(GUI:CreateHeader(self.child, L["Private Aura Dispel Overlay"]), 40)
+
+        -- Warning notice
+        local noticeText = containerGroup:AddWidget(GUI:CreateLabel(self.child, "|cFFFF4444Note:|r " .. L["This overlay is rendered by Blizzard and has limited customisation. It is not the same as the Dispel Overlay tab."], 260), 50)
+
+        -- Enable checkbox
+        local containerEnable = containerGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Enable Dispel Overlay"], db, "bossDebuffsContainerOverlayEnabled", function()
+            if DF.PreviewPrivateAuraAnchors then DF:PreviewPrivateAuraAnchors() end
+            GUI:RefreshCurrentPage()
+        end), 30)
+
+        local function HideContainerOverlayOptions(d)
+            return not d.bossDebuffsEnabled or not d.bossDebuffsContainerOverlayEnabled
+        end
+
+        -- Show Overlay For dropdown
+        local dispelModeOptions = {
+            [1] = L["Dispellable By Me"],
+            [2] = L["All Dispellable"],
+        }
+        local containerDispelMode = containerGroup:AddWidget(GUI:CreateDropdown(self.child, L["Show Overlay For"], dispelModeOptions, db, "bossDebuffsContainerOverlayDispelMode", function()
+            if DF.PreviewPrivateAuraAnchors then DF:PreviewPrivateAuraAnchors() end
+        end), 55)
+        containerDispelMode.hideOn = HideContainerOverlayOptions
+
+        -- Gradient Direction dropdown
+        local gradientDirOptions = {
+            [0] = L["Top Edge"],
+            [1] = L["Bottom Edge"],
+            [2] = L["Left Edge"],
+        }
+        local containerGradientDir = containerGroup:AddWidget(GUI:CreateDropdown(self.child, L["Gradient Direction"], gradientDirOptions, db, "bossDebuffsContainerOverlayGradientDir", function()
+            if DF.PreviewPrivateAuraAnchors then DF:PreviewPrivateAuraAnchors() end
+        end), 55)
+        containerGradientDir.hideOn = HideContainerOverlayOptions
+        local gradientNote = containerGroup:AddWidget(GUI:CreateLabel(self.child, "|cFF888888" .. L["Right Edge is not available in the Blizzard API."] .. "|r", 260), 20)
+        gradientNote.hideOn = HideContainerOverlayOptions
+
+        -- Show Dispel Icons checkbox
+        local containerShowIcons = containerGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Show Dispel Icons"], db, "bossDebuffsContainerOverlayShowIcons", function()
+            if DF.PreviewPrivateAuraAnchors then DF:PreviewPrivateAuraAnchors() end
+        end), 30)
+        containerShowIcons.hideOn = HideContainerOverlayOptions
+
+        containerGroup.hideOn = HideBossDebuffOptions
+        Add(containerGroup, nil, 2)
+        end -- IS_CONTAINER_SUPPORTED
 
         -- See Also links
         AddSpace(20, "both")
@@ -5561,12 +5909,12 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             overlay:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
             overlay:SetBackdropColor(0, 0, 0, 0.85)
 
-            local title = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+            local title = overlay:CreateFontString(nil, "OVERLAY", "DFFontNormalHuge")
             title:SetPoint("CENTER", 0, 80)
             title:SetText(L["Disabled — WoW API Change"])
             title:SetTextColor(1, 0.82, 0)
 
-            local body = overlay:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+            local body = overlay:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
             body:SetPoint("TOP", title, "BOTTOM", 0, -20)
             body:SetWidth(520)
             body:SetJustifyH("CENTER")
@@ -5605,16 +5953,12 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
     end
 
     -- ============================================================
-    -- Indicators > Targeted List (ALPHA / BETA ONLY)
+    -- Indicators > Targeted List
     -- ============================================================
     -- Stacked cast-bar display showing enemy casts targeting party
     -- members. Replaces the group-frame Targeted Spells icons that
     -- Blizzard's 2026-04-07 UnitIsUnit hotfix permanently broke.
-    --
-    -- The entire page registration is gated by DF.RELEASE_CHANNEL —
-    -- on stable builds no sub-tab is created, no navigation entry
-    -- exists, and users never see this feature. The db defaults and
-    -- all lifecycle code are also gated at their own check sites.
+    -- Party-only feature; raid mode shows a redirect message.
     local pageTargetedList = CreateSubTab("indicators", "indicators_targetedlist", L["Targeted List"])
     BuildPage(pageTargetedList, function(self, db, Add, AddSpace, AddSyncPoint)
             -- Party-only feature: show message and return if in raid mode
@@ -7078,7 +7422,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             btn:SetBackdropColor(0.15, 0.15, 0.15, 1)
             btn:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
             
-            local text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local text = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             text:SetPoint("CENTER")
             text:SetText(p)
             
@@ -7338,7 +7682,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             cb.Check:SetSize(8, 8)
             cb:SetCheckedTexture(cb.Check)
             
-            local txt = container:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local txt = container:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             txt:SetPoint("LEFT", cb, "RIGHT", 4, 0)
             txt:SetText(label)
             txt:SetTextColor(0.85, 0.85, 0.85)
@@ -7374,7 +7718,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             btn:SetBackdropColor(0.15, 0.15, 0.15, 1)
             btn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.8)
             
-            btn.text = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            btn.text = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             btn.text:SetPoint("CENTER")
             btn.text:SetText(text)
             btn.text:SetTextColor(0.8, 0.8, 0.8)
@@ -7498,7 +7842,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         
         local exportEditBox = CreateFrame("EditBox", nil, exportScroll)
         exportEditBox:SetMultiLine(true)
-        exportEditBox:SetFontObject(GameFontHighlightSmall)
+        exportEditBox:SetFontObject(DFFontHighlightSmall)
         exportEditBox:SetWidth(210)
         exportEditBox:SetHeight(90)
         exportEditBox:SetAutoFocus(false)
@@ -7549,7 +7893,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         
         local importEditBox = CreateFrame("EditBox", nil, importScroll)
         importEditBox:SetMultiLine(true)
-        importEditBox:SetFontObject(GameFontHighlightSmall)
+        importEditBox:SetFontObject(DFFontHighlightSmall)
         importEditBox:SetWidth(210)
         importEditBox:SetHeight(70)
         importEditBox:SetAutoFocus(false)
@@ -7620,7 +7964,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         end), 30)
         
         -- Info label
-        local infoLabel = self.child:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local infoLabel = self.child:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         infoLabel:SetWidth(240)
         infoLabel:SetJustifyH("LEFT")
         infoLabel:SetText("|cff888888Paste string above, then Parse|r")
@@ -7808,12 +8152,12 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                 row:SetBackdropColor(0.14, 0.14, 0.14, 1)
                 row:SetBackdropBorderColor(0.25, 0.25, 0.25, 0.5)
 
-                local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                local nameText = row:CreateFontString(nil, "OVERLAY", "DFFontNormal")
                 nameText:SetPoint("TOPLEFT", 12, -8)
                 nameText:SetText(entry.name)
                 nameText:SetTextColor(0.9, 0.9, 0.9)
 
-                local descText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                local descText = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
                 descText:SetPoint("TOPLEFT", 12, -24)
                 descText:SetPoint("RIGHT", row, "RIGHT", -90, 0)
                 descText:SetText(entry.description or "")
@@ -7856,12 +8200,12 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                 row:SetBackdropColor(0.14, 0.14, 0.14, 1)
                 row:SetBackdropBorderColor(0.25, 0.25, 0.25, 0.5)
 
-                local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+                local nameText = row:CreateFontString(nil, "OVERLAY", "DFFontNormal")
                 nameText:SetPoint("TOPLEFT", 12, -8)
                 nameText:SetText(config.title or name)
                 nameText:SetTextColor(0.9, 0.9, 0.9)
 
-                local descText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+                local descText = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
                 descText:SetPoint("TOPLEFT", 12, -24)
                 descText:SetPoint("RIGHT", row, "RIGHT", -240, 0)
                 descText:SetText(config.description or "")
@@ -8205,12 +8549,12 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             popup:SetScript("OnDragStart", popup.StartMoving)
             popup:SetScript("OnDragStop", popup.StopMovingOrSizing)
 
-            local title = popup:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+            local title = popup:CreateFontString(nil, "OVERLAY", "DFFontNormalLarge")
             title:SetPoint("TOP", 0, -10)
             title:SetText(L["Debug Log Export (Filtered)"])
             title:SetTextColor(0.9, 0.9, 0.9)
 
-            local instructions = popup:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            local instructions = popup:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
             instructions:SetPoint("TOP", title, "BOTTOM", 0, -4)
             instructions:SetText(L["Press Ctrl+A to select all, then Ctrl+C to copy"])
             instructions:SetTextColor(0.6, 0.6, 0.6)
@@ -8233,7 +8577,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
 
             local editBox = CreateFrame("EditBox", nil, scroll)
             editBox:SetMultiLine(true)
-            editBox:SetFontObject(GameFontHighlightSmall)
+            editBox:SetFontObject(DFFontHighlightSmall)
             editBox:SetWidth(440)
             editBox:SetAutoFocus(true)
             editBox:SetScript("OnEscapePressed", function() popup:Hide() end)
@@ -8272,7 +8616,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
 
         local logEditBox = CreateFrame("EditBox", nil, logScroll)
         logEditBox:SetMultiLine(true)
-        logEditBox:SetFontObject(GameFontHighlightSmall)
+        logEditBox:SetFontObject(DFFontHighlightSmall)
         logEditBox:SetWidth(510)
         logEditBox:SetHeight(470)
         logEditBox:SetAutoFocus(false)
@@ -8330,7 +8674,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
 
         local scriptEditBox = CreateFrame("EditBox", nil, scriptScroll)
         scriptEditBox:SetMultiLine(true)
-        scriptEditBox:SetFontObject(GameFontHighlightSmall)
+        scriptEditBox:SetFontObject(DFFontHighlightSmall)
         scriptEditBox:SetWidth(510)
         scriptEditBox:SetHeight(112)
         scriptEditBox:SetAutoFocus(false)

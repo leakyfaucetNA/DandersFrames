@@ -413,6 +413,12 @@ DF.ExportCategories = {
         "bossDebuffsOverlayMaxSlots",
         "bossDebuffsOverlayScale",
 
+        -- Container Overlay (12.0.5+)
+        "bossDebuffsContainerOverlayEnabled",
+        "bossDebuffsContainerOverlayDispelMode",
+        "bossDebuffsContainerOverlayGradientDir",
+        "bossDebuffsContainerOverlayShowIcons",
+
         -- Buff Filters
         "buffFilterCancelable",
         "buffFilterMode",

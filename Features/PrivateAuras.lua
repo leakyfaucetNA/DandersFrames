@@ -16,6 +16,11 @@ local pairs, ipairs, pcall = pairs, ipairs, pcall
 local CreateFrame = CreateFrame
 local InCombatLockdown = InCombatLockdown
 local UnitExists = UnitExists
+local GetBuildInfo = GetBuildInfo
+
+-- 12.0.5+ requires isContainer in AddPrivateAuraAnchor args
+local CLIENT_VERSION = select(4, GetBuildInfo())
+local IS_CONTAINER_SUPPORTED = CLIENT_VERSION >= 120005
 
 -- ============================================================
 -- FILE-SCOPE STATE
@@ -27,8 +32,12 @@ local frameAnchors = {}
 -- Track overlay anchor IDs per frame for cleanup
 local overlayAnchors = {}
 
--- Forward declaration (defined after SetupPrivateAuraAnchors)
+-- Track container overlay anchor IDs per frame for cleanup
+local containerOverlayAnchors = {}
+
+-- Forward declarations (defined after SetupPrivateAuraAnchors)
 local SetupOverlayAnchors
+local SetupContainerOverlay
 
 -- Pending updates queue (for changes made during combat)
 local pendingUpdates = {}
@@ -196,8 +205,10 @@ function DF:SetupPrivateAuraAnchors(frame)
                 -- Frames are 0.001px so chaining loses the icon dimension.
                 -- Add a full icon width/height in screen space (divided by textScale
                 -- to convert to local coordinates for SetPoint).
-                gapX = gapX + iconWidth  * xMult / textScale
-                gapY = gapY + iconHeight * yMult / textScale
+                -- abs() because xMult/yMult can be negative (LEFT/UP growth) — we
+                -- want to extend the gap, not cancel it.
+                gapX = gapX + iconWidth  * math.abs(xMult) / textScale
+                gapY = gapY + iconHeight * math.abs(yMult) / textScale
             end
             iconFrame:SetPoint(pointOnCurrent, prevFrame, pointOnPrev, gapX, gapY)
         end
@@ -227,7 +238,7 @@ function DF:SetupPrivateAuraAnchors(frame)
         -- Timer text and stack count are rendered by Blizzard as children of
         -- iconFrame and inherit its scale, giving us scaled text for free.
         local success, anchorID = pcall(function()
-            return C_UnitAuras.AddPrivateAuraAnchor({
+            local anchorArgs = {
                 unitToken = unit,
                 auraIndex = i,
                 parent    = iconFrame,
@@ -245,7 +256,11 @@ function DF:SetupPrivateAuraAnchors(frame)
                         offsetY       = 0,
                     },
                 },
-            })
+            }
+            if IS_CONTAINER_SUPPORTED then
+                anchorArgs.isContainer = false
+            end
+            return C_UnitAuras.AddPrivateAuraAnchor(anchorArgs)
         end)
 
         if DF.bossDebuffDebug then
@@ -261,8 +276,13 @@ function DF:SetupPrivateAuraAnchors(frame)
         end
     end
 
-    -- Set up frame border overlay if enabled
-    SetupOverlayAnchors(frame, unit, db)
+    -- Old border overlay hack (pre-12.0.5 only)
+    if not IS_CONTAINER_SUPPORTED then
+        SetupOverlayAnchors(frame, unit, db)
+    end
+
+    -- Set up container dispel overlay (12.0.5+ native overlay)
+    SetupContainerOverlay(frame, unit, db)
 
     -- Track which unit anchors are monitoring
     frame.bossDebuffAnchoredUnit = unit
@@ -358,7 +378,7 @@ SetupOverlayAnchors = function(frame, unit, db)
 
         -- Register anchor with invisible icon, visible border
         local success, anchorID = pcall(function()
-            return C_UnitAuras.AddPrivateAuraAnchor({
+            local anchorArgs = {
                 unitToken = unit,
                 auraIndex = i,
                 parent = sub,
@@ -376,7 +396,11 @@ SetupOverlayAnchors = function(frame, unit, db)
                         offsetY = 0,
                     },
                 },
-            })
+            }
+            if IS_CONTAINER_SUPPORTED then
+                anchorArgs.isContainer = false
+            end
+            return C_UnitAuras.AddPrivateAuraAnchor(anchorArgs)
         end)
 
         if success and anchorID then
@@ -388,6 +412,121 @@ SetupOverlayAnchors = function(frame, unit, db)
     for i = maxSlots + 1, #frame.overlaySubContainers do
         frame.overlaySubContainers[i]:Hide()
     end
+end
+
+-- ============================================================
+-- CONTAINER DISPEL OVERLAY SETUP (12.0.5+)
+-- Registers a single isContainer=true anchor that renders
+-- Blizzard's native dispel overlay for private auras.
+-- ============================================================
+
+SetupContainerOverlay = function(frame, unit, db)
+    if not IS_CONTAINER_SUPPORTED then return end
+    if not db.bossDebuffsContainerOverlayEnabled then return end
+
+    -- Create or reuse the wrapper frame
+    -- Parent to contentOverlay so the overlay renders above the health bar
+    local parent = frame.contentOverlay or frame
+    local wrapper = frame.containerOverlayFrame
+    if not wrapper then
+        wrapper = CreateFrame("Frame", nil, parent)
+        wrapper:EnableMouse(false)
+        if wrapper.SetMouseClickEnabled then wrapper:SetMouseClickEnabled(false) end
+        frame.containerOverlayFrame = wrapper
+    end
+
+    wrapper:SetParent(parent)
+    wrapper:ClearAllPoints()
+    wrapper:SetAllPoints(parent)
+    wrapper:Show()
+
+    -- Determine group type from unit token
+    local groupType
+    if unit and unit:find("^party") then
+        groupType = 4
+    else
+        groupType = 5
+    end
+
+    -- Set container attributes (must be set BEFORE AddPrivateAuraAnchor,
+    -- because OnAnchorAdded calls ReadContainerSettings immediately)
+    wrapper:SetAttribute("max-buffs", 0)
+    wrapper:SetAttribute("max-debuffs", 0)
+    wrapper:SetAttribute("max-dispel-debuffs", 1)
+    wrapper:SetAttribute("ignore-buffs", true)
+    wrapper:SetAttribute("ignore-debuffs", true)
+    wrapper:SetAttribute("show-dispel-indicator-overlay", true)
+    wrapper:SetAttribute("suppress-dispel-border-icons", not db.bossDebuffsContainerOverlayShowIcons)
+    wrapper:SetAttribute("dispel-indicator-option", db.bossDebuffsContainerOverlayDispelMode)
+    wrapper:SetAttribute("aura-organization-type", db.bossDebuffsContainerOverlayGradientDir)
+    wrapper:SetAttribute("group-type", groupType)
+    wrapper:SetAttribute("power-bar-used-height", 0)
+    wrapper:SetAttribute("icon-size", 10)
+    wrapper:SetAttribute("set-aura-size-to-icon-size", false)
+
+    -- Register the container anchor
+    local success, anchorID = pcall(function()
+        return C_UnitAuras.AddPrivateAuraAnchor({
+            unitToken = unit,
+            parent = wrapper,
+            isContainer = true,
+            auraIndex = 1,
+            showCountdownFrame = false,
+            showCountdownNumbers = false,
+        })
+    end)
+
+    if success and anchorID then
+        containerOverlayAnchors[frame] = anchorID
+        if DF.bossDebuffDebug then
+            DF:Debug("Container overlay registered for " .. unit .. " anchorID=" .. tostring(anchorID))
+        end
+    else
+        if DF.bossDebuffDebug then
+            DF:DebugError("Container overlay registration FAILED for " .. unit .. ": " .. tostring(anchorID))
+        end
+    end
+end
+
+function DF:UpdateContainerOverlaySettings(frame)
+    if not IS_CONTAINER_SUPPORTED then return end
+    if not frame then return end
+
+    local db = DF:GetFrameDB(frame)
+    if not db then return end
+
+    local wrapper = frame.containerOverlayFrame
+    if not wrapper then return end
+
+    -- If overlay was just disabled, do a full teardown/setup
+    if not db.bossDebuffsContainerOverlayEnabled then
+        local anchorID = containerOverlayAnchors[frame]
+        if anchorID then
+            pcall(function()
+                C_UnitAuras.RemovePrivateAuraAnchor(anchorID)
+            end)
+            containerOverlayAnchors[frame] = nil
+        end
+        wrapper:Hide()
+        return
+    end
+
+    -- If no anchor exists yet (was just enabled), do full setup
+    if not containerOverlayAnchors[frame] then
+        local unit = frame.bossDebuffAnchoredUnit or frame.unit
+        if unit then
+            SetupContainerOverlay(frame, unit, db)
+        end
+        return
+    end
+
+    -- Update attributes for live changes
+    wrapper:SetAttribute("suppress-dispel-border-icons", not db.bossDebuffsContainerOverlayShowIcons)
+    wrapper:SetAttribute("dispel-indicator-option", db.bossDebuffsContainerOverlayDispelMode)
+    wrapper:SetAttribute("aura-organization-type", db.bossDebuffsContainerOverlayGradientDir)
+
+    -- Signal the container to re-read settings
+    wrapper:SetAttribute("update-settings", true)
 end
 
 -- ============================================================
@@ -433,6 +572,20 @@ function DF:ClearPrivateAuraAnchors(frame)
     -- Hide overlay container (keep for reuse)
     if frame.overlayContainer then
         frame.overlayContainer:Hide()
+    end
+
+    -- Remove container overlay anchor
+    local containerAnchorID = containerOverlayAnchors[frame]
+    if containerAnchorID then
+        pcall(function()
+            C_UnitAuras.RemovePrivateAuraAnchor(containerAnchorID)
+        end)
+        containerOverlayAnchors[frame] = nil
+    end
+
+    -- Hide container overlay wrapper (keep for reuse)
+    if frame.containerOverlayFrame then
+        frame.containerOverlayFrame:Hide()
     end
 
     frame.bossDebuffAnchoredUnit = nil
@@ -647,8 +800,8 @@ local function UpdateFramePositions(frame)
             local gapX = spacing * xMult / textScale
             local gapY = spacing * yMult / textScale
             if hideTooltip then
-                gapX = gapX + iconWidth  * xMult / textScale
-                gapY = gapY + iconHeight * yMult / textScale
+                gapX = gapX + iconWidth  * math.abs(xMult) / textScale
+                gapY = gapY + iconHeight * math.abs(yMult) / textScale
             end
             iconFrame:SetPoint(pointOnCurrent, prevFrame, pointOnPrev, gapX, gapY)
         end

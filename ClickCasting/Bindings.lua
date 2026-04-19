@@ -11,35 +11,25 @@ local GetCombatCondition = function(b) return CC.GetCombatCondition(b) end
 local BuildModifierPrefix = function(m) return CC.BuildModifierPrefix(m) end
 local GetButtonNumber = function(b) return CC.GetButtonNumber(b) end
 
--- BUG #10 FIX: Secure PreClick snippet that blocks menu actions based on combat condition.
--- Stored as a string constant for use with SecureHandlerWrapScript.
--- Runs in WoW's restricted Lua environment on each click before the action fires.
-local MENU_COMBAT_PRESCRIPT = [[
-    local bnum
-    if button == "LeftButton" then bnum = "1"
-    elseif button == "RightButton" then bnum = "2"
-    elseif button == "MiddleButton" then bnum = "3"
-    elseif button == "Button4" then bnum = "4"
-    elseif button == "Button5" then bnum = "5"
-    else bnum = nil end
-
-    local cond
-    if bnum then
-        local mods = ""
-        if IsAltKeyDown() then mods = mods .. "alt-" end
-        if IsControlKeyDown() then mods = mods .. "ctrl-" end
-        if IsShiftKeyDown() then mods = mods .. "shift-" end
-        cond = self:GetAttribute("dfMenuCombat-" .. mods .. bnum)
-    end
-    if not cond then
-        cond = self:GetAttribute("dfMenuCombat-" .. button)
-    end
-    if cond then
-        if (cond == "nocombat" and PlayerInCombat()) or (cond == "combat" and not PlayerInCombat()) then
-            return "dfMenuBlocked", down
-        end
-    end
-]]
+-- BUG #10 / BUG #860 FIX: Combat-conditional type attribute via RegisterAttributeDriver.
+-- SecureHandlerWrapScript on PreClick can't block type="target" or type="togglemenu"
+-- because SecureActionButton_OnClick reads attributes keyed off the ORIGINAL mouse
+-- button, not any value the PreClick prescript returns. RegisterAttributeDriver
+-- solves this natively: it evaluates a macro conditional and writes the result to
+-- the named attribute, re-evaluating whenever relevant events fire (e.g. combat
+-- entry/exit). It runs in the restricted environment, so it works during lockdown.
+--
+-- For a "combat only" target binding:  [combat] target;     → "target" in combat, "" out
+-- For a "nocombat only" target binding: [nocombat] target;   → "target" out of combat, "" in
+--
+-- Tracks registered driver attribute names on frame.dfAttrDriverList so they can
+-- be unregistered when bindings change.
+local function AddCombatConditional(frame, typeAttr, realType, combatCond)
+    local macro = "[" .. combatCond .. "] " .. realType .. ";"
+    RegisterAttributeDriver(frame, typeAttr, macro)
+    frame.dfAttrDriverList = frame.dfAttrDriverList or {}
+    table.insert(frame.dfAttrDriverList, typeAttr)
+end
 
 -- BINDING APPLICATION
 -- ============================================================
@@ -298,18 +288,12 @@ function CC:ClearBindingsFromFrame(frame)
         end
     end
     
-    -- BUG #10 FIX: Clear menu combat condition attributes
-    for _, mod in ipairs(modifiers) do
-        for _, btn in ipairs(buttons) do
-            frame:SetAttribute("dfMenuCombat-" .. mod .. btn, nil)
+    -- BUG #10 / #860 FIX: Unregister any combat-conditional attribute drivers.
+    if frame.dfAttrDriverList then
+        for _, attr in ipairs(frame.dfAttrDriverList) do
+            UnregisterAttributeDriver(frame, attr)
         end
-    end
-    -- Also clear tracked virtual button combat conditions (key/scroll bindings)
-    if frame.dfMenuCombatKeys then
-        for _, key in ipairs(frame.dfMenuCombatKeys) do
-            frame:SetAttribute("dfMenuCombat-" .. key, nil)
-        end
-        frame.dfMenuCombatKeys = nil
+        frame.dfAttrDriverList = nil
     end
     
     -- Also clear any existing override bindings on this frame (but not if hovered)
@@ -608,20 +592,21 @@ function CC:SetupHovercastButtonAttributes()
             
             if isSpecialAction then
                 if actionType == "menu" or actionType == self.ACTION_TYPES.MENU then
-                    btn:SetAttribute("type-" .. virtualBtn, "togglemenu")
-                    -- BUG #10 FIX: Store combat condition for hovercast menu binding
+                    local typeAttr = "type-" .. virtualBtn
+                    btn:SetAttribute(typeAttr, "togglemenu")
+                    -- BUG #10 FIX: state-driver-based combat conditional
                     local combatCond = GetCombatCondition(binding)
                     if combatCond then
-                        btn:SetAttribute("dfMenuCombat-" .. virtualBtn, combatCond)
-                        if not btn.dfMenuCombatKeys then btn.dfMenuCombatKeys = {} end
-                        table.insert(btn.dfMenuCombatKeys, virtualBtn)
-                        if not btn.dfMenuCombatWrapped then
-                            btn.dfMenuCombatWrapped = true
-                            SecureHandlerWrapScript(btn, "PreClick", btn, MENU_COMBAT_PRESCRIPT)
-                        end
+                        AddCombatConditional(btn, typeAttr, "togglemenu", combatCond)
                     end
                 elseif actionType == "target" then
-                    btn:SetAttribute("type-" .. virtualBtn, "target")
+                    local typeAttr = "type-" .. virtualBtn
+                    btn:SetAttribute(typeAttr, "target")
+                    -- BUG #860 FIX: state-driver-based combat conditional
+                    local combatCond = GetCombatCondition(binding)
+                    if combatCond then
+                        AddCombatConditional(btn, typeAttr, "target", combatCond)
+                    end
                 elseif actionType == "focus" or actionType == self.ACTION_TYPES.FOCUS then
                     btn:SetAttribute("type-" .. virtualBtn, "focus")
                 elseif actionType == "assist" or actionType == self.ACTION_TYPES.ASSIST then
@@ -2555,32 +2540,41 @@ function CC:ApplyBindingsToFrameUnified(frame, skipKeyboardUpdate)
                     -- Use direct attribute types for special actions
                     if actionType == "menu" or actionType == self.ACTION_TYPES.MENU then
                         frame:SetAttribute(typeAttr, "togglemenu")
+                        local vBtn
                         if needsVirtualBtn or needsMetaVirtualBtn then
-                            local virtualBtn = self:GetVirtualButtonName(binding)
-                            frame:SetAttribute("type-" .. virtualBtn, "togglemenu")
+                            vBtn = self:GetVirtualButtonName(binding)
+                            frame:SetAttribute("type-" .. vBtn, "togglemenu")
                         end
-                        -- BUG #10 FIX: Store combat condition so PreClick can block in wrong state
+                        -- BUG #10 FIX: state-driver-based combat conditional
                         local combatCond = GetCombatCondition(binding)
                         if combatCond then
-                            frame:SetAttribute("dfMenuCombat-" .. modPrefix .. buttonNum, combatCond)
-                            if not frame.dfMenuCombatWrapped then
-                                frame.dfMenuCombatWrapped = true
-                                SecureHandlerWrapScript(frame, "PreClick", frame, MENU_COMBAT_PRESCRIPT)
+                            AddCombatConditional(frame, typeAttr, "togglemenu", combatCond)
+                            if vBtn then
+                                AddCombatConditional(frame, "type-" .. vBtn, "togglemenu", combatCond)
                             end
                         end
                     elseif actionType == "target" then
                         frame:SetAttribute(typeAttr, "target")
-                        -- For Blizzard frames, also set unit="mouseover" to ensure targeting works
+                        -- For Blizzard frames, also set unit="mouseover" to ensure targeting works.
                         -- Native type="target" uses the frame's unit attribute, but some frames
-                        -- may not have it properly accessible
+                        -- may not have it properly accessible.
                         if frame.dfIsBlizzardFrame then
                             local unitAttr = modPrefix .. "unit" .. buttonNum
                             frame:SetAttribute(unitAttr, "mouseover")
                         end
+                        local vBtn
                         if needsVirtualBtn or needsMetaVirtualBtn then
-                            local virtualBtn = self:GetVirtualButtonName(binding)
-                            frame:SetAttribute("type-" .. virtualBtn, "target")
-                            frame:SetAttribute("unit-" .. virtualBtn, "mouseover")
+                            vBtn = self:GetVirtualButtonName(binding)
+                            frame:SetAttribute("type-" .. vBtn, "target")
+                            frame:SetAttribute("unit-" .. vBtn, "mouseover")
+                        end
+                        -- BUG #860 FIX: state-driver-based combat conditional
+                        local combatCond = GetCombatCondition(binding)
+                        if combatCond then
+                            AddCombatConditional(frame, typeAttr, "target", combatCond)
+                            if vBtn then
+                                AddCombatConditional(frame, "type-" .. vBtn, "target", combatCond)
+                            end
                         end
                     elseif actionType == "focus" or actionType == self.ACTION_TYPES.FOCUS then
                         frame:SetAttribute(typeAttr, "focus")
@@ -2616,22 +2610,22 @@ function CC:ApplyBindingsToFrameUnified(frame, skipKeyboardUpdate)
                 
                 if isSpecialAction then
                     if actionType == "menu" or actionType == self.ACTION_TYPES.MENU then
-                        frame:SetAttribute("type-" .. virtualBtn, "togglemenu")
-                        -- BUG #10 FIX: Store combat condition for key/scroll menu binding
+                        local typeAttr = "type-" .. virtualBtn
+                        frame:SetAttribute(typeAttr, "togglemenu")
+                        -- BUG #10 FIX: state-driver-based combat conditional
                         local combatCond = GetCombatCondition(binding)
                         if combatCond then
-                            frame:SetAttribute("dfMenuCombat-" .. virtualBtn, combatCond)
-                            -- Track virtual button keys for cleanup
-                            if not frame.dfMenuCombatKeys then frame.dfMenuCombatKeys = {} end
-                            table.insert(frame.dfMenuCombatKeys, virtualBtn)
-                            if not frame.dfMenuCombatWrapped then
-                                frame.dfMenuCombatWrapped = true
-                                SecureHandlerWrapScript(frame, "PreClick", frame, MENU_COMBAT_PRESCRIPT)
-                            end
+                            AddCombatConditional(frame, typeAttr, "togglemenu", combatCond)
                         end
                     elseif actionType == "target" then
-                        frame:SetAttribute("type-" .. virtualBtn, "target")
+                        local typeAttr = "type-" .. virtualBtn
+                        frame:SetAttribute(typeAttr, "target")
                         frame:SetAttribute("unit-" .. virtualBtn, "mouseover")
+                        -- BUG #860 FIX: state-driver-based combat conditional
+                        local combatCond = GetCombatCondition(binding)
+                        if combatCond then
+                            AddCombatConditional(frame, typeAttr, "target", combatCond)
+                        end
                     elseif actionType == "focus" or actionType == self.ACTION_TYPES.FOCUS then
                         frame:SetAttribute("type-" .. virtualBtn, "focus")
                     elseif actionType == "assist" or actionType == self.ACTION_TYPES.ASSIST then

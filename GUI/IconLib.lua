@@ -67,13 +67,13 @@ local function CreateIconPreview()
     frame:SetFrameStrata("DIALOG")
     
     -- Title
-    local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    local title = frame:CreateFontString(nil, "OVERLAY", "DFFontNormalLarge")
     title:SetPoint("TOP", 0, -12)
     title:SetText("Material Icons Preview")
     title:SetTextColor(C_ACCENT.r, C_ACCENT.g, C_ACCENT.b)
     
     -- Subtitle
-    local subtitle = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local subtitle = frame:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     subtitle:SetPoint("TOP", title, "BOTTOM", 0, -4)
     subtitle:SetText("25 icons from Google Material Symbols (Apache 2.0)")
     subtitle:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -92,7 +92,7 @@ local function CreateIconPreview()
     closeBtn:SetScript("OnLeave", function() closeIcon:SetVertexColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b) end)
     
     -- Color buttons for testing SetVertexColor
-    local colorLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local colorLabel = frame:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     colorLabel:SetPoint("TOPLEFT", 16, -50)
     colorLabel:SetText("Theme Color:")
     colorLabel:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -190,7 +190,7 @@ local function CreateIconPreview()
         table.insert(iconTextures, icon)
         
         -- Label
-        local label = container:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        local label = container:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
         label:SetPoint("BOTTOM", 0, 4)
         label:SetText(iconName)
         label:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)
@@ -218,7 +218,7 @@ local function CreateIconPreview()
     end
     
     -- Usage info at bottom
-    local usage = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local usage = frame:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     usage:SetPoint("BOTTOM", 0, 12)
     usage:SetText("Click icon to copy path • Icons are white and can be tinted with SetVertexColor()")
     usage:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b)

@@ -430,7 +430,7 @@ function DF:ShowPerformanceMonitor()
     monitorFrame:SetClampedToScreen(true)
     
     -- Title
-    local title = monitorFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local title = monitorFrame:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     title:SetPoint("TOP", 0, -8)
     title:SetText("|cff00ff00DandersFrames Performance|r")
     
@@ -443,25 +443,25 @@ function DF:ShowPerformanceMonitor()
     closeBtn:SetScript("OnClick", function() monitorFrame:Hide() end)
     
     -- Row 1: Memory current + CPU current
-    monitorFrame.memoryText = monitorFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    monitorFrame.memoryText = monitorFrame:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     monitorFrame.memoryText:SetPoint("TOPLEFT", 12, -28)
     monitorFrame.memoryText:SetJustifyH("LEFT")
     
-    monitorFrame.cpuText = monitorFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    monitorFrame.cpuText = monitorFrame:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     monitorFrame.cpuText:SetPoint("TOPRIGHT", -12, -28)
     monitorFrame.cpuText:SetJustifyH("RIGHT")
     
     -- Row 2: Peak/Avg + Session
-    monitorFrame.statsText = monitorFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    monitorFrame.statsText = monitorFrame:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     monitorFrame.statsText:SetPoint("TOPLEFT", 12, -42)
     monitorFrame.statsText:SetJustifyH("LEFT")
     
-    monitorFrame.sessionText = monitorFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    monitorFrame.sessionText = monitorFrame:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     monitorFrame.sessionText:SetPoint("TOPRIGHT", -12, -42)
     monitorFrame.sessionText:SetJustifyH("RIGHT")
     
     -- Graph section label
-    local graphLabel = monitorFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local graphLabel = monitorFrame:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     graphLabel:SetPoint("TOPLEFT", 12, -60)
     graphLabel:SetText("|cff88ff88Memory|r (Last 2.5 min)")
     
@@ -491,29 +491,29 @@ function DF:ShowPerformanceMonitor()
     end
     
     -- Min/Max labels (positioned outside graph on right side)
-    monitorFrame.graphMaxLabel = monitorFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    monitorFrame.graphMaxLabel = monitorFrame:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     monitorFrame.graphMaxLabel:SetPoint("TOPLEFT", graphContainer, "TOPRIGHT", 4, 0)
     monitorFrame.graphMaxLabel:SetTextColor(0.6, 0.6, 0.6)
     monitorFrame.graphMaxLabel:SetText("")
     
-    monitorFrame.graphMinLabel = monitorFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    monitorFrame.graphMinLabel = monitorFrame:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     monitorFrame.graphMinLabel:SetPoint("BOTTOMLEFT", graphContainer, "BOTTOMRIGHT", 4, 0)
     monitorFrame.graphMinLabel:SetTextColor(0.6, 0.6, 0.6)
     monitorFrame.graphMinLabel:SetText("")
     
     -- Time labels below graph
-    local timeLabel1 = monitorFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local timeLabel1 = monitorFrame:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     timeLabel1:SetPoint("TOPLEFT", graphContainer, "BOTTOMLEFT", 0, -2)
     timeLabel1:SetText("-2.5m")
     timeLabel1:SetTextColor(0.5, 0.5, 0.5)
     
-    local timeLabel2 = monitorFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local timeLabel2 = monitorFrame:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     timeLabel2:SetPoint("TOPRIGHT", graphContainer, "BOTTOMRIGHT", 0, -2)
     timeLabel2:SetText("now")
     timeLabel2:SetTextColor(0.5, 0.5, 0.5)
     
     -- API info label at bottom
-    monitorFrame.apiLabel = monitorFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    monitorFrame.apiLabel = monitorFrame:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     monitorFrame.apiLabel:SetPoint("BOTTOM", 0, 8)
     monitorFrame.apiLabel:SetTextColor(0.5, 0.5, 0.5)
     

@@ -40,6 +40,7 @@ local function IsRosterUnit(unit)
     if unit == "player" then return true end
     if strfind(unit, "^party%d$") then return true end
     if strfind(unit, "^raid%d+$") then return true end
+    if strfind(unit, "^boss%d$") then return true end
     return false
 end
 
@@ -634,6 +635,22 @@ local function TriggerAuraUpdateForUnit(unit)
                         if DF.UpdateDispelOverlay then
                             DF:UpdateDispelOverlay(child)
                         end
+                    end
+                end
+            end
+        end
+    end
+
+    -- Also update pinned boss frames
+    if DF.PinnedFrames and DF.PinnedFrames.bossFrames then
+        for setIndex = 1, 2 do
+            local frames = DF.PinnedFrames.bossFrames[setIndex]
+            if frames then
+                for i = 1, 8 do
+                    local f = frames[i]
+                    if f and f:IsVisible() and f.unit == unit then
+                        if DF.UpdateAuras_Enhanced then DF:UpdateAuras_Enhanced(f) end
+                        if DF.UpdateDefensiveBar then DF:UpdateDefensiveBar(f) end
                     end
                 end
             end
@@ -1514,6 +1531,21 @@ local function ScanUnitFull(unit)
 
     local cache = EnsureAuraCacheEntry(unit)
 
+    -- Don't wipe aura cache for out-of-range units — the API returns nothing
+    -- for OOR units, so rescanning would destroy valid cached data.
+    -- When they come back in range, UNIT_AURA fires again with real data.
+    local frame = DF.unitFrameMap and DF.unitFrameMap[unit]
+    if frame then
+        local inRange = frame.dfInRange
+        local isSecret = issecretvalue and issecretvalue(inRange)
+        if not isSecret and inRange == false then
+            -- Only skip if we already have data cached (don't skip first scan)
+            if cache.hasFullScan then
+                return
+            end
+        end
+    end
+
     -- Wipe the new Fix A fields
     wipe(cache.buffsByID)
     wipe(cache.debuffsByID)
@@ -1667,6 +1699,7 @@ end
 -- Expose on DF so the dev slash command and tests can call them directly
 DF.ScanUnitFull   = function(self, unit) ScanUnitFull(unit) end
 DF.ApplyAuraDelta = function(self, unit, updateInfo) return ApplyAuraDelta(unit, updateInfo) end
+DF.TriggerAuraUpdateForUnit = function(self, unit) TriggerAuraUpdateForUnit(unit) end
 
 -- ============================================================
 -- DEFENSIVE CACHE POPULATOR (mode-independent)

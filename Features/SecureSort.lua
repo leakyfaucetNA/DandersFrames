@@ -2334,6 +2334,23 @@ function SecureSort:ProcessInspectQueue()
     -- Wait for result (handled by INSPECT_READY event)
 end
 
+-- Debounce party-sort re-runs driven by inspect results. Inspects arrive roughly
+-- every 0.5s via ProcessInspectQueue; coalescing into a single sort avoids
+-- Hide/Show flicker across all 4 party members' inspects.
+function SecureSort:ScheduleInspectDrivenPartySort()
+    if self.pendingInspectPartySortTimer then return end
+    self.pendingInspectPartySortTimer = C_Timer.NewTimer(0.75, function()
+        self.pendingInspectPartySortTimer = nil
+        if InCombatLockdown() then
+            self.pendingInspectPartySort = true
+            return
+        end
+        if not IsInRaid() and DF.ApplyPartyGroupSorting then
+            DF:ApplyPartyGroupSorting()
+        end
+    end)
+end
+
 -- Handle INSPECT_READY event
 function SecureSort:OnInspectReady(guid)
     -- Only process if this was an inspect WE initiated (guid is in our queue)
@@ -2366,6 +2383,12 @@ function SecureSort:OnInspectReady(guid)
                         DF:Debug("FLATRAID", "Skipping UpdateNameList from inspect: grouped mode active")
                     end
                 end
+                -- Re-apply party sorting so melee/ranged classification settles as inspects
+                -- complete, instead of waiting for an unrelated roster/combat event.
+                -- Debounced: inspects stream in ~0.5s apart, so coalesce into one sort.
+                if not IsInRaid() and DF.ApplyPartyGroupSorting then
+                    self:ScheduleInspectDrivenPartySort()
+                end
             else
                 -- Defer FlatRaidFrames re-sort until combat ends
                 if DF.FlatRaidFrames and DF.FlatRaidFrames.initialized then
@@ -2373,6 +2396,10 @@ function SecureSort:OnInspectReady(guid)
                     if rdb and not rdb.raidUseGroups then
                         DF.FlatRaidFrames.pendingNameListUpdate = true
                     end
+                end
+                -- Defer party sort until combat ends
+                if not IsInRaid() then
+                    self.pendingInspectPartySort = true
                 end
             end
         end
@@ -5838,6 +5865,15 @@ roleUpdateFrame:SetScript("OnEvent", function(self, event, arg1)
             SecureSort.pendingNamesPush = false
             SecureSort:PushPartyUnitNames()
             DebugPrint("Pushed pending party names after combat")
+        end
+
+        -- Process pending inspect-driven party sort (inspects that resolved during combat)
+        if SecureSort.pendingInspectPartySort and not IsInRaid() then
+            SecureSort.pendingInspectPartySort = false
+            if DF.ApplyPartyGroupSorting then
+                DF:ApplyPartyGroupSorting()
+                DebugPrint("Applied pending inspect-driven party sort after combat")
+            end
         end
         
         -- Process pending raid settings push

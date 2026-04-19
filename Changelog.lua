@@ -1,8 +1,67 @@
 local addonName, DF = ...
-DF.BUILD_DATE = "2026-04-13T11:37:34Z"
+DF.BUILD_DATE = "2026-04-19T12:59:46Z"
 DF.RELEASE_CHANNEL = "alpha"
 DF.CHANGELOG_TEXT = [===[
 # DandersFrames Changelog
+
+## [4.3.2] - 2026-04-17
+
+### New Features
+
+* **Friendly Boss NPC Frames** — Pinned frame sets now have a Frame Type setting. Switch a set to "Friendly Boss NPCs" to display healable friendly boss units (boss1–boss8) instead of group members. Useful for encounters where friendly adds need healing. All layout, positioning, click-casting, buffs, debuffs, and Aura Designer indicators work the same as player-mode pinned sets.
+* **Update notification** — if another DandersFrames user in your group or guild is running a newer stable version, you'll see a one-time chat message on login. Can be disabled in General > Settings > Notifications.
+
+### Improvements
+
+* **Pinned Frames** — movers are now color-coded per mode (orange for raid, purple-blue for party) so it's obvious which mode's position you're editing
+* **Pinned Frames** — opening a pinned-frames page for the inactive mode (e.g. Raid settings while you're solo or in a party) now shows a preview container for that mode's frames so you can reposition them without joining a group
+
+### Bug Fixes
+
+* Fix DPS jumping order mid-dungeon when "Separate Melee & Ranged DPS" is enabled
+* (Click-Casting) Fix "In Combat Only" and "Out of Combat Only" conditions being ignored for Target Unit and Open Menu bindings
+* (Aura Designer) Fix beacon indicators being invisible if saved at an icon size smaller than the slider minimum
+* (Aura Designer) Fix indicators inside Layout Groups not being draggable
+* (Aura Designer) Spec-specific spells (e.g. Earthshield) now appear correctly after switching specs without needing a reload
+* (Auto Profiles) Fix brief flicker to party settings when exiting the auto-profile editor before the raid override re-applies
+* (Status Text) Fix "Offline" / "AFK" text lingering on a frame after the player comes back online
+* (Status Text) Add "DND" status text display (previously only AFK was shown)
+* (Frames) Fix the Resurrected buff icon staying on a player's frame after they've come back to life
+* (Frames) Fix the summon-pending icon staying on your frame after leaving the group
+* (Auras) Raid frame aura icon borders are now pixel-perfect (were slightly blurry when raid frame scale differed from UIParent)
+* (Boss Debuffs) Fix boss debuff icons overlapping instead of spacing correctly when tooltips are hidden and growth direction is left/up
+* (Defensives) Fix defensive cooldown icons swapping slot positions / flickering when multiple cooldowns are active
+* (Defensives) Fix the second defensive cooldown icon not fading when the player is out of range or out of phase
+* (Pinned Frames) Dragging the mover while viewing the inactive mode's settings no longer silently saves the new position to the active mode's profile
+* (Pinned Frames) The Enable, Lock Position, and Show Label checkboxes no longer mutate the active mode's container when toggled from the inactive mode's settings
+* (Pinned Frames) Fix the second pinned-frames tab being unselectable when the two sets had different Frame Types — the tab now sticks across the page rebuild
+* (Pinned Frames) Boss-mode preview container now uses a single-frame placeholder (matching live behaviour when no boss is visible) instead of a four-frame-wide box
+* (Aura Designer) Sound alerts now pick up live edits without toggling the alert off and on
+* (Test Mode) Correct Monkbrew test unit from Mistweaver (healer) to Brewmaster (tank)
+
+### 12.0.5 Compatibility
+
+* **Private Aura Dispel Overlay** — on 12.0.5+, a new Blizzard-rendered dispel overlay for private auras replaces the old frame border overlay. Controlled from Boss Debuffs settings with options for dispel filter, gradient direction, and dispel type icons.
+* Fix private aura anchors for 12.0.5 API changes
+
+## [4.3.1] - 2026-04-15
+
+### New Features
+
+* **Disable Party or Raid frames** — new toggles in General > Settings let you fully disable either frame system. Disabled frames never load, so they use no resources. Requires a reload; the popup can also toggle Blizzard's frames on or off for you in the same reload.
+* **Custom font for the settings panel** — pick a font and outline in General > Settings > Appearance. Applies instantly, no reload.
+* **Addon language override** — run the addon in a different language than your WoW client (per-character). Defaults to auto-detect.
+
+### Improvements
+
+* Reorganised General > Settings into Frame Modes, Blizzard Frames, Appearance, and Language sections
+* Blizzard frame toggles renamed from "Hide" to "Disable" (they fully disable, not just hide) and now appear in both Party and Raid views
+* "Hide Blizzard Player Frame" moved to Display > Visibility
+* Fixed Cyrillic, Korean, and Chinese characters showing as squares in various places
+
+### Bug Fixes
+
+* (Aura Designer) Holy Paladin: Holy Bulwark now triggers the same indicator as Sacred Weapon. A warning icon on the spell explains why the two can't be tracked separately.
 
 ## [4.3.0] - 2026-04-10
 

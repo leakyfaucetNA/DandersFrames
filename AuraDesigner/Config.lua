@@ -207,6 +207,13 @@ DF.AuraDesigner.AlternateSpellIDs = {
         [382021] = "EarthlivingWeapon",  -- alternate ID (primary is 382024)
         [382022] = "EarthlivingWeapon",  -- alternate ID (primary is 382024)
     },
+    HolyPaladin = {
+        -- Holy Bulwark (shield) and Sacred Weapon (weapon) are the two
+        -- variants of Armament of Light. They share signature "0:1:0:0"
+        -- and cannot be distinguished via the aura API, so we track
+        -- them as a single "HolyArmaments" indicator.
+        [432496] = "HolyArmaments",  -- Holy Bulwark (primary is 432502 / Sacred Weapon)
+    },
 }
 
 -- ============================================================
@@ -379,7 +386,7 @@ DF.AuraDesigner.TrackableAuras = {
         { name = "BeaconOfVirtue",      display = "Beacon of Virtue",      color = {1.00, 0.88, 0.37}, secret = false },
         { name = "BeaconOfTheSavior",   display = "Beacon of the Savior",  color = {0.93, 0.80, 0.47} },
         { name = "BlessingOfProtection", display = "Blessing of Protection", color = {0.94, 0.82, 0.31}, secret = true },
-        { name = "HolyArmaments",        display = "Holy Armaments",         color = {0.81, 0.58, 0.93}, secret = true },
+        { name = "HolyArmaments",        display = "Holy Armaments",         color = {0.81, 0.58, 0.93}, secret = true, warningKey = "HolyArmamentsMerge" },
         { name = "BlessingOfSacrifice",  display = "Blessing of Sacrifice",  color = {0.94, 0.50, 0.50}, secret = true },
         { name = "BlessingOfFreedom",    display = "Blessing of Freedom",    color = {0.56, 0.93, 0.56}, secret = true },
         { name = "Dawnlight",            display = "Dawnlight",              color = {1.00, 0.84, 0.28}, secret = true },

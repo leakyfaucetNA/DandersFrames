@@ -511,15 +511,15 @@ function AutoProfilesUI:BuildPage(GUI, pageFrame, db, Add, AddSpace)
     statusContainer:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
     statusContainer:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
     
-    local statusTitle = statusContainer:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    local statusTitle = statusContainer:CreateFontString(nil, "OVERLAY", "DFFontNormalSmall")
     statusTitle:SetPoint("TOPLEFT", 10, -8)
     statusTitle:SetText(L["CURRENT STATUS"])
     statusTitle:SetTextColor(0.5, 0.5, 0.5)
     
-    local statusLine1 = statusContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local statusLine1 = statusContainer:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     statusLine1:SetPoint("TOPLEFT", 10, -24)
     
-    local statusLine2 = statusContainer:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local statusLine2 = statusContainer:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     statusLine2:SetPoint("TOPLEFT", 10, -38)
     
     -- Update status display
@@ -610,7 +610,7 @@ function AutoProfilesUI:BuildPage(GUI, pageFrame, db, Add, AddSpace)
     infoArrow:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\" .. (infoCollapsed and "chevron_right" or "expand_more"))
     infoArrow:SetVertexColor(0.6, 0.6, 0.6)
     
-    local howTitle = infoHeader:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local howTitle = infoHeader:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     howTitle:SetPoint("LEFT", 28, 0)
     howTitle:SetText(L["How it works"])
     howTitle:SetTextColor(1, 1, 1)
@@ -642,7 +642,7 @@ function AutoProfilesUI:BuildPage(GUI, pageFrame, db, Add, AddSpace)
     local yOff = -4
     
     -- Step 1
-    local step1 = infoBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local step1 = infoBody:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     step1:SetPoint("TOPLEFT", 10, yOff)
     step1:SetPoint("RIGHT", infoBody, "RIGHT", -10, 0)
     step1:SetJustifyH("LEFT")
@@ -651,7 +651,7 @@ function AutoProfilesUI:BuildPage(GUI, pageFrame, db, Add, AddSpace)
     yOff = yOff - 30
     
     -- Step 2
-    local step2 = infoBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local step2 = infoBody:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     step2:SetPoint("TOPLEFT", 10, yOff)
     step2:SetPoint("RIGHT", infoBody, "RIGHT", -10, 0)
     step2:SetJustifyH("LEFT")
@@ -660,7 +660,7 @@ function AutoProfilesUI:BuildPage(GUI, pageFrame, db, Add, AddSpace)
     yOff = yOff - 30
     
     -- Step 3 - visual indicators
-    local step3 = infoBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local step3 = infoBody:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     step3:SetPoint("TOPLEFT", 10, yOff)
     step3:SetPoint("RIGHT", infoBody, "RIGHT", -10, 0)
     step3:SetJustifyH("LEFT")
@@ -679,7 +679,7 @@ function AutoProfilesUI:BuildPage(GUI, pageFrame, db, Add, AddSpace)
     ex1Check:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\check")
     ex1Check:SetVertexColor(0.3, 0.7, 0.3)
     
-    local ex1Text = exRow1:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local ex1Text = exRow1:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     ex1Text:SetPoint("LEFT", ex1Check, "RIGHT", 4, 0)
     ex1Text:SetText(format(L["%sGlobal: 80%s %s— Setting matches global, no override stored%s"], "|cff4db84d", "|r", "|cff666666", "|r"))
     yOff = yOff - 18
@@ -706,13 +706,13 @@ function AutoProfilesUI:BuildPage(GUI, pageFrame, db, Add, AddSpace)
     ex2Reset:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\refresh")
     ex2Reset:SetVertexColor(0.6, 0.6, 0.6)
     
-    local ex2Text = exRow2:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local ex2Text = exRow2:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     ex2Text:SetPoint("LEFT", ex2ResetBg, "RIGHT", 6, 0)
     ex2Text:SetText(format(L["%sModified%s %s— Setting differs from global. Click%s %sreset%s %sto revert.%s"], "|cffe6cc80", "|r", "|cff666666", "|r", "|cffffffff", "|r", "|cff666666", "|r"))
     yOff = yOff - 22
     
     -- Step 4
-    local step4 = infoBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local step4 = infoBody:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     step4:SetPoint("TOPLEFT", 10, yOff)
     step4:SetPoint("RIGHT", infoBody, "RIGHT", -10, 0)
     step4:SetJustifyH("LEFT")
@@ -721,7 +721,7 @@ function AutoProfilesUI:BuildPage(GUI, pageFrame, db, Add, AddSpace)
     yOff = yOff - 30
     
     -- Step 5
-    local step5 = infoBody:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local step5 = infoBody:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     step5:SetPoint("TOPLEFT", 10, yOff)
     step5:SetPoint("RIGHT", infoBody, "RIGHT", -10, 0)
     step5:SetJustifyH("LEFT")
@@ -793,13 +793,13 @@ function AutoProfilesUI:CreateContentTypeSection(GUI, pageFrame, contentType)
     section.arrow:SetVertexColor(0.6, 0.6, 0.6)
     
     -- Title
-    local titleText = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local titleText = header:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     titleText:SetPoint("LEFT", 28, 0)
     titleText:SetText(contentType.title)
     titleText:SetTextColor(1, 0.5, 0.2)  -- Raid orange
     
     -- Description
-    local descText = header:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local descText = header:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     descText:SetPoint("RIGHT", -10, 0)
     descText:SetText(contentType.description)
     descText:SetTextColor(0.5, 0.5, 0.5)
@@ -848,7 +848,7 @@ function AutoProfilesUI:CreateContentTypeSection(GUI, pageFrame, contentType)
     
     -- Empty state for mythic
     if contentType.key == "mythic" and numProfiles == 0 then
-        local emptyText = section.body:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local emptyText = section.body:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         emptyText:SetPoint("TOP", 0, -10)
         emptyText:SetText("|cff666666" .. L["No layout set. Using global settings."] .. "|r")
         
@@ -879,7 +879,7 @@ function AutoProfilesUI:CreateProfileRow(GUI, pageFrame, parent, contentType, pr
     row:SetBackdropColor(0.08, 0.08, 0.08, 1)
     
     -- Profile name
-    local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local nameText = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     nameText:SetPoint("LEFT", 10, 0)
     nameText:SetText(profile.name or L["Unnamed"])
     nameText:SetWidth(100)
@@ -897,7 +897,7 @@ function AutoProfilesUI:CreateProfileRow(GUI, pageFrame, parent, contentType, pr
     rangeBadge:SetBackdropColor(0.18, 0.18, 0.18, 1)
     rangeBadge:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
     
-    local rangeText = rangeBadge:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local rangeText = rangeBadge:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     rangeText:SetPoint("CENTER")
     
     if contentType.isFixed then
@@ -936,7 +936,7 @@ function AutoProfilesUI:CreateProfileRow(GUI, pageFrame, parent, contentType, pr
         end
     end
     
-    local overrideText = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local overrideText = row:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     overrideText:SetPoint("LEFT", 190, 0)
     if overrideCount > 0 then
         overrideText:SetText("|cffffaa00*|r " .. format(overrideCount > 1 and L["%d overrides"] or L["%d override"], overrideCount))
@@ -1017,7 +1017,7 @@ function AutoProfilesUI:CreateProfileRow(GUI, pageFrame, parent, contentType, pr
     copyBtn:SetBackdropColor(0.15, 0.15, 0.15, 1)
     copyBtn:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
 
-    local copyText = copyBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local copyText = copyBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     copyText:SetPoint("CENTER")
     copyText:SetText(L["Copy To"])
     copyText:SetTextColor(1, 0.5, 0.2)
@@ -1046,7 +1046,7 @@ function AutoProfilesUI:CreateProfileRow(GUI, pageFrame, parent, contentType, pr
     editBtn:SetBackdropColor(0.15, 0.15, 0.15, 1)
     editBtn:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
     
-    local editText = editBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local editText = editBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     editText:SetPoint("CENTER")
     editText:SetText(L["Edit Settings"])
     editText:SetTextColor(1, 0.5, 0.2)
@@ -1147,7 +1147,7 @@ function AutoProfilesUI:CreateAddButton(GUI, pageFrame, parent, contentType)
     btn:SetBackdropBorderColor(0.3, 0.3, 0.3, 0.5)
     
     -- Centered text
-    local btnText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local btnText = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     btnText:SetPoint("CENTER", 0, 0)
     btnText:SetText(L["+ Add Layout"])
     btnText:SetTextColor(0.5, 0.5, 0.5)
@@ -1205,7 +1205,7 @@ function AutoProfilesUI:CreateProfileDialog()
     dialog:Hide()
     
     -- Title
-    local title = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local title = dialog:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     title:SetPoint("TOPLEFT", 12, -12)
     title:SetTextColor(0.9, 0.9, 0.9)
     dialog.title = title
@@ -1241,7 +1241,7 @@ function AutoProfilesUI:CreateProfileDialog()
     -- =============================================
     -- Profile Name Section
     -- =============================================
-    local nameLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local nameLabel = dialog:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     nameLabel:SetPoint("TOPLEFT", 12, -40)
     nameLabel:SetText(L["Layout Name"])
     nameLabel:SetTextColor(0.6, 0.6, 0.6)
@@ -1257,7 +1257,7 @@ function AutoProfilesUI:CreateProfileDialog()
     })
     nameInput:SetBackdropColor(0.03, 0.03, 0.03, 1)
     nameInput:SetBackdropBorderColor(0.2, 0.2, 0.2, 1)
-    nameInput:SetFontObject("GameFontHighlight")
+    nameInput:SetFontObject("DFFontHighlight")
     nameInput:SetTextInsets(8, 8, 0, 0)
     nameInput:SetAutoFocus(false)
     nameInput:SetMaxLetters(30)
@@ -1271,14 +1271,14 @@ function AutoProfilesUI:CreateProfileDialog()
     -- =============================================
     -- Range Section with Dual-Handle Slider
     -- =============================================
-    local rangeLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local rangeLabel = dialog:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     rangeLabel:SetPoint("TOPLEFT", 12, -92)
     rangeLabel:SetText(L["Player Range"])
     rangeLabel:SetTextColor(0.6, 0.6, 0.6)
     dialog.rangeLabel = rangeLabel
 
     -- Range display
-    local rangeDisplay = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local rangeDisplay = dialog:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     rangeDisplay:SetPoint("TOPRIGHT", -12, -92)
     rangeDisplay:SetTextColor(1, 0.5, 0.2)
     dialog.rangeDisplay = rangeDisplay
@@ -1470,7 +1470,7 @@ function AutoProfilesUI:CreateProfileDialog()
     -- Scale labels
     local scaleLabels = {1, 10, 20, 30, 40}
     for _, num in ipairs(scaleLabels) do
-        local label = sliderTrack:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local label = sliderTrack:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         label:SetText(num)
         label:SetTextColor(0.35, 0.35, 0.35)
         local xPos = ValueToPos(num, 1, 40)
@@ -1485,7 +1485,7 @@ function AutoProfilesUI:CreateProfileDialog()
     validationIcon:SetPoint("TOPLEFT", 12, -152)
     dialog.validationIcon = validationIcon
     
-    local validationMsg = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local validationMsg = dialog:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     validationMsg:SetPoint("LEFT", validationIcon, "RIGHT", 6, 0)
     validationMsg:SetWidth(310)
     validationMsg:SetJustifyH("LEFT")
@@ -1505,7 +1505,7 @@ function AutoProfilesUI:CreateProfileDialog()
     cancelBtn:SetBackdropColor(0.1, 0.1, 0.1, 1)
     cancelBtn:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
     
-    local cancelText = cancelBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local cancelText = cancelBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     cancelText:SetPoint("CENTER")
     cancelText:SetText(L["Cancel"])
     cancelText:SetTextColor(0.6, 0.6, 0.6)
@@ -1533,7 +1533,7 @@ function AutoProfilesUI:CreateProfileDialog()
     createBtn:SetBackdropColor(0.15, 0.08, 0.03, 1)
     createBtn:SetBackdropBorderColor(1, 0.5, 0.2, 1)
 
-    local createText = createBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local createText = createBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     createText:SetPoint("CENTER")
     createText:SetText(L["Create Layout"])
     createText:SetTextColor(1, 0.5, 0.2)
@@ -1785,7 +1785,7 @@ function AutoProfilesUI:CreateCopyDialog()
     dialog:Hide()
 
     -- Title
-    local title = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local title = dialog:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     title:SetPoint("TOPLEFT", 12, -12)
     title:SetText(L["Copy Layout"])
     title:SetTextColor(0.9, 0.9, 0.9)
@@ -1822,7 +1822,7 @@ function AutoProfilesUI:CreateCopyDialog()
     -- =============================================
     -- Layout Name Section
     -- =============================================
-    local nameLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local nameLabel = dialog:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     nameLabel:SetPoint("TOPLEFT", 12, -40)
     nameLabel:SetText(L["Layout Name"])
     nameLabel:SetTextColor(0.6, 0.6, 0.6)
@@ -1837,7 +1837,7 @@ function AutoProfilesUI:CreateCopyDialog()
     })
     nameInput:SetBackdropColor(0.03, 0.03, 0.03, 1)
     nameInput:SetBackdropBorderColor(0.2, 0.2, 0.2, 1)
-    nameInput:SetFontObject("GameFontHighlight")
+    nameInput:SetFontObject("DFFontHighlight")
     nameInput:SetTextInsets(8, 8, 0, 0)
     nameInput:SetAutoFocus(false)
     nameInput:SetMaxLetters(30)
@@ -1851,7 +1851,7 @@ function AutoProfilesUI:CreateCopyDialog()
     -- =============================================
     -- Destination Selector (radio-style buttons)
     -- =============================================
-    local destLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local destLabel = dialog:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     destLabel:SetPoint("TOPLEFT", 12, -92)
     destLabel:SetText(L["Copy To"])
     destLabel:SetTextColor(0.6, 0.6, 0.6)
@@ -1873,7 +1873,7 @@ function AutoProfilesUI:CreateCopyDialog()
         btn:SetBackdropColor(0.1, 0.1, 0.1, 1)
         btn:SetBackdropBorderColor(0.3, 0.3, 0.3, 1)
 
-        local btnText = btn:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local btnText = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         btnText:SetPoint("CENTER")
         btnText:SetText(ct.title)
         btnText:SetTextColor(0.6, 0.6, 0.6)
@@ -1920,13 +1920,13 @@ function AutoProfilesUI:CreateCopyDialog()
     -- =============================================
     -- Range Section (dual-handle slider, same as profile dialog)
     -- =============================================
-    local rangeLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local rangeLabel = dialog:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     rangeLabel:SetPoint("TOPLEFT", 12, -144)
     rangeLabel:SetText(L["Player Range"])
     rangeLabel:SetTextColor(0.6, 0.6, 0.6)
     dialog.rangeLabel = rangeLabel
 
-    local rangeDisplay = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local rangeDisplay = dialog:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     rangeDisplay:SetPoint("TOPRIGHT", -12, -144)
     rangeDisplay:SetTextColor(1, 0.5, 0.2)
     dialog.rangeDisplay = rangeDisplay
@@ -2080,7 +2080,7 @@ function AutoProfilesUI:CreateCopyDialog()
     -- Scale labels
     local scaleLabels = {1, 10, 20, 30, 40}
     for _, num in ipairs(scaleLabels) do
-        local label = sliderTrack:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        local label = sliderTrack:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
         label:SetText(num)
         label:SetTextColor(0.35, 0.35, 0.35)
         local xPos = CopyValueToPos(num)
@@ -2088,7 +2088,7 @@ function AutoProfilesUI:CreateCopyDialog()
     end
 
     -- Mythic fixed label (shown when mythic is selected destination)
-    local mythicFixedLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local mythicFixedLabel = dialog:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     mythicFixedLabel:SetPoint("TOPLEFT", 12, -155)
     mythicFixedLabel:SetText(L["Fixed at 20 players (Mythic)"])
     mythicFixedLabel:SetTextColor(0.5, 0.5, 0.5)
@@ -2103,7 +2103,7 @@ function AutoProfilesUI:CreateCopyDialog()
     validationIcon:SetPoint("TOPLEFT", 12, -200)
     dialog.validationIcon = validationIcon
 
-    local validationMsg = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local validationMsg = dialog:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     validationMsg:SetPoint("LEFT", validationIcon, "RIGHT", 6, 0)
     validationMsg:SetWidth(310)
     validationMsg:SetJustifyH("LEFT")
@@ -2123,7 +2123,7 @@ function AutoProfilesUI:CreateCopyDialog()
     cancelBtn:SetBackdropColor(0.1, 0.1, 0.1, 1)
     cancelBtn:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
 
-    local cancelText = cancelBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local cancelText = cancelBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     cancelText:SetPoint("CENTER")
     cancelText:SetText(L["Cancel"])
     cancelText:SetTextColor(0.6, 0.6, 0.6)
@@ -2151,7 +2151,7 @@ function AutoProfilesUI:CreateCopyDialog()
     createBtn:SetBackdropColor(0.15, 0.08, 0.03, 1)
     createBtn:SetBackdropBorderColor(1, 0.5, 0.2, 1)
 
-    local createText = createBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local createText = createBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     createText:SetPoint("CENTER")
     createText:SetText(L["Copy Layout"])
     createText:SetTextColor(1, 0.5, 0.2)
@@ -2623,7 +2623,13 @@ function AutoProfilesUI:ExitEditing(skipUIUpdates)
 
     -- Skip UI updates when GUI is closing (UI will reset on next open anyway)
     if skipUIUpdates then return end
-    
+
+    -- Re-evaluate auto-profiles BEFORE UpdateAll so any re-applied overlay is in
+    -- place when frames read settings — otherwise UpdateAll would read globals,
+    -- then the delayed evaluator would re-apply the overlay causing a flicker.
+    -- EvaluateAndApply internally checks InCombatLockdown so this is combat-safe.
+    AutoProfilesUI:EvaluateAndApply()
+
     -- Refresh frames to show global settings again
     if DF.UpdateAll then DF:UpdateAll() end
 
@@ -2655,11 +2661,6 @@ function AutoProfilesUI:ExitEditing(skipUIUpdates)
     if GUI and GUI.SelectTab then
         GUI.SelectTab("profiles_auto")
     end
-
-    -- Re-evaluate auto-profiles (may re-apply if still in matching content)
-    C_Timer.After(0.1, function()
-        AutoProfilesUI:EvaluateAndApply()
-    end)
 end
 
 function AutoProfilesUI:GetEditingInfo()
@@ -2731,19 +2732,19 @@ function AutoProfilesUI:CreateEditingBanner(parent)
     icon:SetVertexColor(1, 0.5, 0.2)
     
     -- "Editing:" label
-    local editLabel = banner:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local editLabel = banner:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     editLabel:SetPoint("LEFT", icon, "RIGHT", 8, 6)
     editLabel:SetText(L["Editing:"])
     editLabel:SetTextColor(0.7, 0.7, 0.7)
     
     -- Profile name and content type
-    local profileText = banner:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    local profileText = banner:CreateFontString(nil, "OVERLAY", "DFFontNormal")
     profileText:SetPoint("LEFT", editLabel, "RIGHT", 6, 0)
     profileText:SetTextColor(1, 0.5, 0.2)
     banner.profileText = profileText
     
     -- Range info line
-    local infoText = banner:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local infoText = banner:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     infoText:SetPoint("LEFT", icon, "RIGHT", 8, -10)
     infoText:SetTextColor(0.5, 0.5, 0.5)
     banner.infoText = infoText
@@ -2760,7 +2761,7 @@ function AutoProfilesUI:CreateEditingBanner(parent)
     exitBtn:SetBackdropColor(0.1, 0.1, 0.1, 1)
     exitBtn:SetBackdropBorderColor(0.4, 0.4, 0.4, 1)
 
-    local exitText = exitBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local exitText = exitBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     exitText:SetPoint("CENTER")
     exitText:SetText(L["Exit Editing"])
     exitText:SetTextColor(0.8, 0.8, 0.8)
@@ -2789,7 +2790,7 @@ function AutoProfilesUI:CreateEditingBanner(parent)
     resetADBtn:SetBackdropColor(0.12, 0.06, 0.06, 1)
     resetADBtn:SetBackdropBorderColor(0.5, 0.15, 0.15, 1)
 
-    local resetADText = resetADBtn:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    local resetADText = resetADBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlight")
     resetADText:SetPoint("CENTER")
     resetADText:SetText(L["Reset to Global"])
     resetADText:SetTextColor(1, 0.5, 0.5)
@@ -2965,7 +2966,7 @@ function AutoProfilesUI:SetupEditingBanner()
     hintBg:SetBackdropColor(0.12, 0.06, 0.02, 0.95)
     hintBg:EnableMouse(false)
 
-    local hintText = hintBg:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local hintText = hintBg:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     hintText:SetPoint("CENTER", hintBg, "CENTER", 0, 0)
     hintText:SetWidth(140)
     hintText:SetJustifyH("CENTER")
