@@ -273,6 +273,17 @@ function DF:UpdateRaidGroupedLayout()
     -- Update group layout params from current settings
     SecureSort:UpdateRaidGroupLayoutParams()
     local lp = SecureSort.raidGroupLayoutParams
+
+    -- [LEAK-TEST] Instrumentation: does the live Lua path run, and what's lp.testMode?
+    -- Toggle: /run DandersFrames.debugLeakTest = true (or false to silence)
+    if DF.debugLeakTest then
+        print(string.format(
+            "|cffffa500[DF LEAK-TEST]|r UpdateRaidGroupedLayout -> Lua fallback  raidTestMode=%s  lp.testMode=%s  db.sortEnabled=%s",
+            tostring(DF.raidTestMode),
+            tostring(lp and lp.testMode),
+            tostring(db and db.sortEnabled)
+        ))
+    end
     
     -- Count visible frames and build group membership data
     -- PERFORMANCE FIX: Reuse tables instead of creating new ones

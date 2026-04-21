@@ -986,6 +986,7 @@ L["Only the aura on the caster can be blacklisted. The aura on the target cannot
 L["Open Settings"] = true
 L["Only the active layout can be edited\nwhile auto layouts are running."] = true
 L["OOC"] = true
+L["Open Aura Blacklist"] = true
 L["Open Aura Designer"] = true
 L["Open Cast History"] = true
 L["Open Personal Targeted Spells"] = true
@@ -1325,6 +1326,7 @@ L["Tint Color"] = true
 L["Tint Opacity"] = true
 L["to customise\nthis profile's settings"] = true
 L["To fix the ElvUI compatibility issue:"] = true
+L["To blacklist specific auras, see the Aura Blacklist tab."] = true
 L["To reposition: Unlock frames (/df unlock) and drag the mover."] = true
 L["Toggle Solo Mode"] = true
 L["Toggle Test Mode"] = true

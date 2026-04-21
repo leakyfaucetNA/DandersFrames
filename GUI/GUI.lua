@@ -26,7 +26,44 @@ GUI.SelectedMode = "party"
 -- Add tab IDs here for new features; the badge auto-hides once viewed.
 GUI.NewTabs = {
     ["indicators_targetedlist"] = true,
+    ["general_pinnedframes"] = true,
 }
+
+-- Registry of section headers (inside a tab) that should show a "New" badge
+-- until the user visits the tab and then navigates away. Keyed by
+-- "<tabName>.<sectionId>" so entries are unambiguous across tabs.
+-- The badge is created by GUI:AddSectionNewBadge and cleared by SelectTab
+-- when the user leaves the owning tab (persisted via seenSections).
+GUI.NewSections = {
+    ["general_pinnedframes.frameType"] = true,
+}
+
+-- Live-tracked badges pending a "seen" mark, keyed by tabName → { key = badge }.
+-- Populated by AddSectionNewBadge, drained by SelectTab on tab leave.
+GUI.pendingSectionBadges = {}
+
+-- Add a gold "New" badge to the right of a section header's text. Returns the
+-- badge FontString, or nil if the section isn't registered in NewSections or
+-- has already been marked seen. The badge clears (and is persisted as seen)
+-- the next time the user navigates away from `tabName`.
+function GUI:AddSectionNewBadge(header, tabName, sectionId)
+    if not header or not header.text or not tabName or not sectionId then return end
+    local key = tabName .. "." .. sectionId
+    if not GUI.NewSections[key] then return end
+
+    local seen = DandersFramesDB_v2 and DandersFramesDB_v2.seenSections
+                 and DandersFramesDB_v2.seenSections[key]
+    if seen then return end
+
+    local badge = header:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
+    badge:SetPoint("LEFT", header.text, "RIGHT", 6, 0)
+    badge:SetText(L["New"])
+    badge:SetTextColor(1, 0.82, 0)
+
+    GUI.pendingSectionBadges[tabName] = GUI.pendingSectionBadges[tabName] or {}
+    GUI.pendingSectionBadges[tabName][key] = badge
+    return badge
+end
 
 -- Pages that remain fully accessible regardless of whether party or raid
 -- mode is disabled via General settings. All other mode-specific tabs
@@ -7343,7 +7380,22 @@ function DF:CreateGUI()
         if DF.Search then
             DF.Search:HideResults()
         end
-        
+
+        -- Clear any "New" section-header badges on the tab we're leaving.
+        -- The user has had their chance to see the badges; mark them seen
+        -- persistently so they don't reappear on the next visit.
+        local leavingTab = GUI.CurrentPageName
+        if leavingTab and leavingTab ~= name and GUI.pendingSectionBadges[leavingTab] then
+            for key, badge in pairs(GUI.pendingSectionBadges[leavingTab]) do
+                if badge and badge.Hide then badge:Hide() end
+                if DandersFramesDB_v2 then
+                    DandersFramesDB_v2.seenSections = DandersFramesDB_v2.seenSections or {}
+                    DandersFramesDB_v2.seenSections[key] = true
+                end
+            end
+            GUI.pendingSectionBadges[leavingTab] = nil
+        end
+
         for k, page in pairs(GUI.Pages) do page:Hide() end
         for k, btn in pairs(GUI.Tabs) do
             if btn.accent then btn.accent:Hide() end

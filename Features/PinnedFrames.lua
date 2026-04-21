@@ -359,11 +359,15 @@ function PinnedFrames:OnBossFramesChanged()
     for setIndex = 1, 2 do
         local set = GetSetDB(setIndex)
         if set and set.enabled and IsBossSet(set) then
+            -- unitFrameMap and frame refresh are safe during combat (purely visual/data)
+            self:UpdateBossFrameMapEntries(setIndex)
+            self:RefreshChildFrames(setIndex)
+
+            -- Container resize modifies secure frame size — defer if in combat
             C_Timer.After(0.05, function()
-                if InCombatLockdown() then return end
-                self:ResizeContainer(setIndex)
-                self:RefreshChildFrames(setIndex)
-                self:UpdateBossFrameMapEntries(setIndex)
+                if not InCombatLockdown() then
+                    self:ResizeContainer(setIndex)
+                end
             end)
         end
     end
@@ -508,6 +512,19 @@ function PinnedFrames:CreateBossFrames(setIndex, container)
                     DF:TriggerAuraUpdateForUnit(unit)
                 end
             end
+        end)
+
+        -- OnShow hook: when state driver makes this frame visible, ensure
+        -- full initialization (Aura Designer state, icon pools, etc.)
+        frame:HookScript("OnShow", function(self)
+            C_Timer.After(0.1, function()
+                if self and self.unit and self:IsVisible() then
+                    -- Populate aura cache for this unit if not yet done
+                    if DF.ScanUnitFull then DF:ScanUnitFull(self.unit) end
+                    -- Full refresh ensures Aura Designer BeginFrame/EnsureFrameState runs
+                    if DF.FullFrameRefresh then DF:FullFrameRefresh(self) end
+                end
+            end)
         end)
 
         -- Register with click-casting system
@@ -1875,6 +1892,7 @@ eventFrame:RegisterEvent("ROLE_CHANGED_INFORM")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("INSTANCE_ENCOUNTER_ENGAGE_UNIT")
+eventFrame:RegisterEvent("UNIT_TARGETABLE_CHANGED")
 eventFrame:RegisterEvent("UNIT_FACTION")
 
 eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
@@ -1950,6 +1968,15 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
     if event == "INSTANCE_ENCOUNTER_ENGAGE_UNIT" then
         if PinnedFrames.initialized then
             PinnedFrames:OnBossFramesChanged()
+        end
+        return
+    end
+
+    if event == "UNIT_TARGETABLE_CHANGED" then
+        if type(arg1) == "string" and arg1:match("^boss%d$") then
+            if PinnedFrames.initialized then
+                PinnedFrames:OnBossFramesChanged()
+            end
         end
         return
     end

@@ -736,9 +736,33 @@ function DF:InitializeHeaderChild(frame)
                     end
                 end)
             end
+
+            -- Fire OnFramesSorted for external API subscribers whenever a child's
+            -- unit attribute is reassigned. Catches in-combat reshuffles (roster
+            -- changes, ASSIGNEDROLE re-sorts) that ApplyPartyGroupSorting cannot
+            -- cover due to combat lockdown. Coalesced per sortType per frame so
+            -- Blizzard reshuffling N children only produces one callback.
+            local sortType
+            if self.isArenaFrame then
+                sortType = "arena"
+            elseif self.isRaidFrame then
+                sortType = "raid"
+            else
+                sortType = "party"
+            end
+            DF._sortCallbackPending = DF._sortCallbackPending or {}
+            if not DF._sortCallbackPending[sortType] then
+                DF._sortCallbackPending[sortType] = true
+                C_Timer.After(0, function()
+                    DF._sortCallbackPending[sortType] = nil
+                    if DF.FireAPICallback then
+                        DF:FireAPICallback("OnFramesSorted", sortType)
+                    end
+                end)
+            end
         end
     end)
-    
+
     -- If unit is already set (might be set before OnLoad in some cases), sync it now
     local currentUnit = frame:GetAttribute("unit")
     if currentUnit then
@@ -3397,7 +3421,9 @@ end
 -- Update raid position attributes - SECURE ONLY (no Lua fallback for debugging)
 function DF:UpdateRaidPositionAttributes()
     if not DF.raidPositionHandler then
-        print("|cFFFF0000[DF Headers]|r No secure position handler!")
+        -- Handler is only created when raid frames are enabled (see CreateRaidHeaders
+        -- gated on db.raidEnabled). If raid is disabled, this is a no-op, not an error.
+        DF:Debug("HEADERS", "UpdateRaidPositionAttributes: no raid position handler (raid frames disabled?)")
         return
     end
     
@@ -4282,6 +4308,7 @@ function DF:ApplyRaidGroupSorting()
     if DF.SchedulePrivateAuraReanchor then
         DF:SchedulePrivateAuraReanchor()
     end
+    -- OnFramesSorted callback is fired from child OnAttributeChanged.
 end
 
 -- Refresh all group-based raid frames after sorting changes
@@ -4804,11 +4831,12 @@ end
 -- Apply sorting to flat raid layout (uses FlatRaidFrames)
 function DF:ApplyRaidFlatSorting()
     if InCombatLockdown() then return end
-    
+
     -- Delegate to FlatRaidFrames
     if DF.FlatRaidFrames then
         DF.FlatRaidFrames:UpdateNameList()
     end
+    -- OnFramesSorted callback is fired from child OnAttributeChanged.
 end
 
 -- Refresh all flat raid frames after sorting changes
@@ -5408,9 +5436,9 @@ function DF:PositionRaidHeaders()
     end
     
     local db = DF:GetRaidDB()
-    
+
     if not DF.raidContainer then return end
-    
+
     -- Combined header mode (flat layout) - uses FlatRaidFrames
     if not db.raidUseGroups then
         if DF.FlatRaidFrames then
@@ -5418,7 +5446,7 @@ function DF:PositionRaidHeaders()
         end
         return
     end
-    
+
     -- Separated headers mode - delegate to secure handler
     -- This updates attributes and triggers secure repositioning
     -- Works both in and out of combat!
@@ -6023,6 +6051,9 @@ function DF:ApplyPartyGroupSorting()
     if DF.SchedulePrivateAuraReanchor then
         DF:SchedulePrivateAuraReanchor()
     end
+    -- OnFramesSorted callback is fired from the child OnAttributeChanged
+    -- handler (see CreatePartyFrame), which catches real unit-attribute
+    -- reassignments in both combat and non-combat paths.
 end
 
 -- ============================================================
@@ -6153,6 +6184,7 @@ function DF:ApplyArenaHeaderSorting()
     if DF.SchedulePrivateAuraReanchor then
         DF:SchedulePrivateAuraReanchor()
     end
+    -- OnFramesSorted callback is fired from child OnAttributeChanged.
 end
 
 -- Refresh all party frames after sorting changes
@@ -7312,7 +7344,7 @@ function DF:FinalizeHeaderInit()
     -- and never process events!
     -- ============================================================
     DF.initialized = true
-    
+
     -- Do an immediate missing buff check
     if not InCombatLockdown() and DF.UpdateAllMissingBuffIcons then
         DF:UpdateAllMissingBuffIcons()

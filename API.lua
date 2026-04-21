@@ -792,3 +792,125 @@ function DandersFrames_ClearAllHighlights()
     wipe(externalHighlights)
     return count
 end
+
+-- ============================================================
+-- EVENT CALLBACKS
+-- External subscribable events via CallbackHandler-1.0.
+-- ============================================================
+-- Usage from external addons:
+--   DandersFrames.RegisterCallback(self, "OnFramesSorted", function(event, sortType)
+--       -- sortType is "party", "raid", or "arena"
+--   end)
+--   DandersFrames.UnregisterCallback(self, "OnFramesSorted")
+--
+-- Fires one frame after any DandersFrames unit frame has its `unit` attribute
+-- reassigned - i.e., whenever Blizzard's SecureGroupHeaderTemplate reshuffles
+-- children in response to a roster change, role swap, nameList update, or
+-- internal re-sort. Fires in combat AND out of combat.
+--
+-- Coalesced per sortType: if Blizzard reassigns N children in the same tick
+-- (common during a group-wide reshuffle), the callback fires exactly once
+-- for that sortType on the next frame. Safe to re-query
+-- DandersFrames_GetFrameForUnit(unit) from within the callback.
+-- ============================================================
+
+local CallbackHandler = LibStub and LibStub("CallbackHandler-1.0", true)
+if CallbackHandler then
+    DF.APICallbacks = CallbackHandler:New(DF)
+end
+
+function DF:FireAPICallback(event, ...)
+    if not self.APICallbacks then
+        self:DebugWarn("API", "Fire %s skipped - CallbackHandler-1.0 not loaded", event)
+        return
+    end
+    self:Debug("API", "Fire %s (%s)", event, tostring(...))
+    self.APICallbacks:Fire(event, ...)
+end
+
+-- ============================================================
+-- DEBUG / TEST SLASH COMMANDS
+-- ============================================================
+
+SLASH_DFAPI1 = "/dfapi"
+SlashCmdList["DFAPI"] = function(msg)
+    msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+
+    if msg == "test" then
+        DF:FireAPICallback("OnFramesSorted", "party")
+        DF:FireAPICallback("OnFramesSorted", "raid")
+        DF:FireAPICallback("OnFramesSorted", "arena")
+        print("|cff00ff00DandersFrames:|r Fired test OnFramesSorted (party + raid + arena)")
+
+    elseif msg == "fire" then
+        -- Re-apply the party header sort. Real sorting happens via the
+        -- nameList/groupBy attributes on the SecureGroupHeaderTemplate
+        -- (Headers.lua), not the SecureSort snippet path. This is what
+        -- actually drives OnFramesSorted in production.
+        if InCombatLockdown() then
+            print("|cffff0000DandersFrames:|r Cannot fire sort in combat (header attributes are protected)")
+            return
+        end
+        if DF.ApplyPartyGroupSorting then
+            DF:ApplyPartyGroupSorting()
+            print("|cff00ff00DandersFrames:|r Applied party sort - callback fires ~1 frame later")
+        else
+            print("|cffff0000DandersFrames:|r ApplyPartyGroupSorting not available")
+        end
+
+    elseif msg == "snippet" then
+        -- Isolation test: run a bare secure snippet that ONLY calls CallMethod.
+        -- If this fires the [DF API TRACE] chat line, secure->Lua hop works and
+        -- the sort-path failure is elsewhere (snippet bailing early, etc.).
+        if DF.SecureSort and DF.SecureSort.handler and DF.SecureSort.initialized then
+            if InCombatLockdown() then
+                print("|cffff0000DandersFrames:|r Cannot run snippet test in combat")
+                return
+            end
+            DF.SecureSort.handler:Execute([[
+                self:CallMethod("NotifySortComplete", "snippet-test")
+            ]])
+            print("|cff00ff00DandersFrames:|r Executed bare snippet with CallMethod - expect [DF API TRACE] chat line")
+        else
+            print("|cffff0000DandersFrames:|r SecureSort.handler not ready (initialized=" .. tostring(DF.SecureSort and DF.SecureSort.initialized) .. ")")
+        end
+
+    elseif msg == "watch" then
+        if DF._apiWatchToken then
+            DandersFrames.UnregisterCallback(DF._apiWatchToken, "OnFramesSorted")
+            DF._apiWatchToken = nil
+            print("|cff00ff00DandersFrames:|r API watch OFF")
+        else
+            DF._apiWatchToken = {}
+            DandersFrames.RegisterCallback(DF._apiWatchToken, "OnFramesSorted", function(event, sortType)
+                print(format("|cff00ccff[DF API]|r %s: %s @ %.3f", event, tostring(sortType), GetTime()))
+            end)
+            print("|cff00ff00DandersFrames:|r API watch ON - chat messages on every OnFramesSorted")
+        end
+
+    elseif msg == "list" then
+        if not DF.APICallbacks or not DF.APICallbacks.events then
+            print("|cffff0000DandersFrames:|r callback registry not initialized")
+            return
+        end
+        print("|cff00ccffDandersFrames API callbacks:|r")
+        local any = false
+        for event, subs in pairs(DF.APICallbacks.events) do
+            local count = 0
+            for _ in pairs(subs) do count = count + 1 end
+            print(format("  %s: %d subscriber(s)", event, count))
+            any = true
+        end
+        if not any then
+            print("  (no subscribers)")
+        end
+
+    else
+        print("|cff00ff00DandersFrames API commands:|r")
+        print("  /dfapi test    - fire a test callback (bypasses sort)")
+        print("  /dfapi fire    - trigger a real sort (with pipeline diagnostics)")
+        print("  /dfapi snippet - run a bare secure snippet that only calls CallMethod")
+        print("  /dfapi watch   - toggle a chat-printing subscriber")
+        print("  /dfapi list    - list current subscribers per event")
+    end
+end

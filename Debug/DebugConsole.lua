@@ -70,6 +70,7 @@ local CATEGORY_GROUPS = {
     {
         name = "Other",
         categories = {
+            { key = "API",          desc = "External API callback fires (OnFramesSorted, etc.)" },
             { key = "CLICK",        desc = "Click-casting binding apply, hover, PreClick state" },
             { key = "PET",          desc = "Pet frame lifecycle and visibility" },
             { key = "SCRIPT",       desc = "Lua script errors and pcall failures" },

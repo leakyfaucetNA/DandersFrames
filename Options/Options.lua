@@ -2578,7 +2578,12 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         
         -- ===== FRAME TYPE GROUP (full width) =====
         local frameTypeGroup = GUI:CreateSettingsGroup(self.child, 560)
-        frameTypeGroup:AddWidget(GUI:CreateHeader(self.child, L["Frame Type"]), 40)
+        local frameTypeHeader = GUI:CreateHeader(self.child, L["Frame Type"])
+        -- Gold "New" badge next to the header (the Friendly Boss NPCs option was
+        -- introduced in 4.3.2). Clears when the user navigates away from the
+        -- Pinned Frames tab and stays cleared across sessions.
+        GUI:AddSectionNewBadge(frameTypeHeader, "general_pinnedframes", "frameType")
+        frameTypeGroup:AddWidget(frameTypeHeader, 40)
 
         local frameTypeOptions = {
             player = L["Player Frames"],
@@ -4447,6 +4452,37 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         local dfSort = debuffGroup:AddWidget(GUI:CreateDropdown(self.child, L["Sort Order"], debuffSortOptions, db, "directDebuffSortOrder", DirectFilterChanged), 55)
         dfSort.hideOn = HideDirectOptions
         Add(debuffGroup, nil, 1)
+
+        -- ===== AURA BLACKLIST (Column 2, under Buff Filters) =====
+        -- Pointer section directing users to the dedicated Aura Blacklist tab.
+        -- Aura Filters (this tab) controls what types of auras are shown;
+        -- the Aura Blacklist tab is where specific spells are excluded.
+        do
+            local blacklistGroup = GUI:CreateSettingsGroup(self.child, 280)
+            blacklistGroup:AddWidget(GUI:CreateHeader(self.child, L["Aura Blacklist"]), 40)
+            blacklistGroup:AddWidget(GUI:CreateLabel(self.child,
+                L["To blacklist specific auras, see the Aura Blacklist tab."], 250), 40)
+
+            -- Clickable link button styled like the inline links in the info banner above.
+            local linkBtn = CreateFrame("Button", nil, self.child)
+            linkBtn:SetSize(250, 18)
+            local linkFs = linkBtn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
+            linkFs:SetPoint("LEFT", 0, 0)
+            linkFs:SetText(L["Open Aura Blacklist"])
+            local blTc = GUI.GetThemeColor()
+            linkFs:SetTextColor(blTc.r, blTc.g, blTc.b)
+            linkBtn:SetScript("OnEnter", function() linkFs:SetTextColor(1, 1, 1) end)
+            linkBtn:SetScript("OnLeave", function()
+                local c = GUI.GetThemeColor()
+                linkFs:SetTextColor(c.r, c.g, c.b)
+            end)
+            linkBtn:SetScript("OnClick", function()
+                if GUI.SelectTab then GUI.SelectTab("auras_blacklist") end
+            end)
+            blacklistGroup:AddWidget(linkBtn, 24)
+
+            Add(blacklistGroup, nil, 2)
+        end
 
         -- ===== SEE ALSO =====
         Add(GUI:CreateSeeAlso(self.child, {

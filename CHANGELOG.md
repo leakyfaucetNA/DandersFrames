@@ -1,6 +1,12 @@
 # DandersFrames Changelog
 
-## [4.3.2] - 2026-04-17
+## [4.3.3] - 2026-04-21
+
+### Internal
+
+* Opt-in debug instrumentation for raid group layout params investigation. Enable with `/run DandersFrames.debugLeakTest = true` to log every `PositionRaidFrameToGroupSlot` call and every rebuild of `SecureSort.raidGroupLayoutParams`, to verify whether test-mode state can leak into the live positioning path.
+
+## [4.3.2] - 2026-04-21
 
 ### New Features
 
@@ -11,6 +17,7 @@
 
 * **Pinned Frames** — movers are now color-coded per mode (orange for raid, purple-blue for party) so it's obvious which mode's position you're editing
 * **Pinned Frames** — opening a pinned-frames page for the inactive mode (e.g. Raid settings while you're solo or in a party) now shows a preview container for that mode's frames so you can reposition them without joining a group
+* (Aura Filters) Added an Aura Blacklist pointer section with a link to the dedicated Aura Blacklist tab, making it easier to find spell-specific exclusions from the filters page
 
 ### Bug Fixes
 
@@ -34,11 +41,16 @@
 * (Pinned Frames) Boss-mode preview container now uses a single-frame placeholder (matching live behaviour when no boss is visible) instead of a four-frame-wide box
 * (Aura Designer) Sound alerts now pick up live edits without toggling the alert off and on
 * (Test Mode) Correct Monkbrew test unit from Mistweaver (healer) to Brewmaster (tank)
+* (Frames) Fix "No secure position handler!" red error spamming chat on login/reload when raid frames are disabled
 
 ### 12.0.5 Compatibility
 
 * **Private Aura Dispel Overlay** — on 12.0.5+, a new Blizzard-rendered dispel overlay for private auras replaces the old frame border overlay. Controlled from Boss Debuffs settings with options for dispel filter, gradient direction, and dispel type icons.
 * Fix private aura anchors for 12.0.5 API changes
+
+### API
+
+* **OnFramesSorted callback** — External addons can subscribe to `DandersFrames.RegisterCallback(self, "OnFramesSorted", ...)` to be notified whenever party, raid, or arena frames are reshuffled. Fires once per sortType per tick (coalesced) in both combat and non-combat — covers settings changes, roster updates, role swaps, spec detection, and Blizzard's internal ASSIGNEDROLE re-sorts. Callback receives `(event, sortType)` where sortType is `"party"`, `"raid"`, or `"arena"`. Safe to call `DandersFrames_GetFrameForUnit(unit)` from inside the handler.
 
 ## [4.3.1] - 2026-04-15
 

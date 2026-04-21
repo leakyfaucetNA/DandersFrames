@@ -44,6 +44,10 @@ This folder exists in the repo root but is **git-ignored**. Use it to drop in do
 - Drop in Blizzard API documentation or forum posts about specific problems
 - Add bug report text files for Claude to work through
 
+### Tools
+
+- **`_Reference/tools/decode_profile.py`** — decodes a DandersFrames profile export string (`!DFP1!...`) to JSON outside WoW. Reimplements `LibDeflate:DecodeForPrint` + raw deflate + `LibSerialize:Deserialize` in Python so user-submitted profile strings (from bug reports, Discord, etc.) can be inspected without loading them in-game. Usage: `PYTHONIOENCODING=utf-8 python _Reference/tools/decode_profile.py path/to/profile.txt > profile.json`. Note: integers and floats in LibSerialize are big-endian, not little-endian.
+
 ## Coding Conventions (Quick Reference)
 
 Every Lua file starts with:
