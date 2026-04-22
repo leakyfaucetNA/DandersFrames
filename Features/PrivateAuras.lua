@@ -24,22 +24,32 @@ end
 -- individual boss-debuff icon anchors that `bossDebuffsEnabled` creates —
 -- not just the container overlay.
 --
--- Fix: wrap the API to return {} instead of nil. Blizzard's code then
--- does ({}).isPrivate = true (harmless), stores an empty aura record,
--- and downstream processing short-circuits on missing fields. On the
--- next UNIT_AURA event the stored record is refreshed or removed.
+-- Fix: wrap the API to return a proxy table with a __newindex metatable
+-- that silently rejects assignments. Blizzard's `newAura.isPrivate = ...`
+-- becomes a no-op, so the stored record in self.auras has no isPrivate
+-- field. PrivateAuraUnitWatcher:UpdateAuraByIndex iterates self.auras
+-- and only indexes entries where `auraInfo.isPrivate` is truthy, so the
+-- proxy is never added to privateAurasByIndex → individual icon anchors
+-- don't render a lingering placeholder. When the aura is really removed
+-- (or on a full update), the proxy is cleared from self.auras normally.
+--
+-- Simple `{}` (without the metatable) would let Blizzard set isPrivate
+-- on the empty record, and then UpdateAuraByIndex would pick it up,
+-- causing a lingering empty icon — which is what we're fixing here.
 --
 -- Gated by db.bossDebuffsPrivateAuraCrashFix — read per-call so toggling
 -- the setting takes effect at runtime without reload. Defaults ON, so
 -- the fix is active even before profile load (avoids a crash window
 -- during early combat events while the addon is loading).
 -- ============================================================
+local SAFE_PROXY_META = { __newindex = function() end }
+
 if C_UnitAurasPrivate and C_UnitAurasPrivate.GetAuraDataByAuraInstanceIDPrivate then
     local origGetAuraData = C_UnitAurasPrivate.GetAuraDataByAuraInstanceIDPrivate
     C_UnitAurasPrivate.GetAuraDataByAuraInstanceIDPrivate = function(unit, auraInstanceID)
         local result = origGetAuraData(unit, auraInstanceID)
         if result then return result end
-        -- Fix is ON unless BOTH modes explicitly disable it. `~= false`
+        -- Fix is ON unless BOTH modes explicitly disable it. `== false`
         -- covers nil (default, pre-profile-load) and explicit true.
         local db = DF.db
         local pOff = db and db.party and db.party.bossDebuffsPrivateAuraCrashFix == false
@@ -47,7 +57,9 @@ if C_UnitAurasPrivate and C_UnitAurasPrivate.GetAuraDataByAuraInstanceIDPrivate 
         if pOff and rOff then
             return nil  -- both disabled — let Blizzard's original behaviour (and crash) stand
         end
-        return {}  -- harmless empty record replaces the nil, preventing the crash
+        -- Proxy: Blizzard's subsequent assignment becomes a no-op; stored
+        -- record has no isPrivate field → UpdateAuraByIndex filters it out.
+        return setmetatable({}, SAFE_PROXY_META)
     end
 end
 
