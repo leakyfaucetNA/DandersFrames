@@ -11,6 +11,46 @@ if not C_UnitAuras or not C_UnitAuras.AddPrivateAuraAnchor then
     return
 end
 
+-- ============================================================
+-- BLIZZARD PRIVATE-AURA WATCHER CRASH WORKAROUND
+-- PrivateAuraUnitWatcher:HandleUpdateInfo in Blizzard_PrivateAurasUI
+-- crashes with "attempt to perform indexed assignment on local 'newAura'
+-- (a nil value)" when GetAuraDataByAuraInstanceIDPrivate returns nil for
+-- an aura that was in updateInfo.updatedAuraInstanceIDs but was removed
+-- between event batch and lookup. Blizzard forgot to nil-check; their
+-- code at line 1211 does `newAura.isPrivate = privateAuraSource`.
+--
+-- Triggered for ANY unit with a private aura anchor — including the
+-- individual boss-debuff icon anchors that `bossDebuffsEnabled` creates —
+-- not just the container overlay.
+--
+-- Fix: wrap the API to return {} instead of nil. Blizzard's code then
+-- does ({}).isPrivate = true (harmless), stores an empty aura record,
+-- and downstream processing short-circuits on missing fields. On the
+-- next UNIT_AURA event the stored record is refreshed or removed.
+--
+-- Gated by db.bossDebuffsPrivateAuraCrashFix — read per-call so toggling
+-- the setting takes effect at runtime without reload. Defaults ON, so
+-- the fix is active even before profile load (avoids a crash window
+-- during early combat events while the addon is loading).
+-- ============================================================
+if C_UnitAurasPrivate and C_UnitAurasPrivate.GetAuraDataByAuraInstanceIDPrivate then
+    local origGetAuraData = C_UnitAurasPrivate.GetAuraDataByAuraInstanceIDPrivate
+    C_UnitAurasPrivate.GetAuraDataByAuraInstanceIDPrivate = function(unit, auraInstanceID)
+        local result = origGetAuraData(unit, auraInstanceID)
+        if result then return result end
+        -- Fix is ON unless BOTH modes explicitly disable it. `~= false`
+        -- covers nil (default, pre-profile-load) and explicit true.
+        local db = DF.db
+        local pOff = db and db.party and db.party.bossDebuffsPrivateAuraCrashFix == false
+        local rOff = db and db.raid  and db.raid.bossDebuffsPrivateAuraCrashFix  == false
+        if pOff and rOff then
+            return nil  -- both disabled — let Blizzard's original behaviour (and crash) stand
+        end
+        return {}  -- harmless empty record replaces the nil, preventing the crash
+    end
+end
+
 -- Local references
 local pairs, ipairs, pcall = pairs, ipairs, pcall
 local CreateFrame = CreateFrame
@@ -38,6 +78,48 @@ local containerOverlayAnchors = {}
 -- Forward declarations (defined after SetupPrivateAuraAnchors)
 local SetupOverlayAnchors
 local SetupContainerOverlay
+
+-- ============================================================
+-- PRIVATE-AURA-ONLY DISPEL OVERLAY PATCH
+-- Blizzard's container dispel overlay (when show-dispel-indicator-overlay
+-- is enabled) fires for ANY dispellable debuff, not just private auras —
+-- see PrivateAuraAnchorContainerMixin:ShouldDisplayDispelIndicator in
+-- Blizzard_PrivateAurasUI.lua, which only checks isHarmful/dispelName,
+-- not aura.isPrivate. This overlaps visually with our own regular dispel
+-- overlay that the user has customised.
+--
+-- To let the container overlay coexist with the regular dispel overlay
+-- (container → private auras only, addon overlay → regular dispels),
+-- we monkey-patch the global mixin's ShouldDisplayDispelIndicator so that
+-- non-private auras short-circuit when the db flag is set. The patch is
+-- installed lazily on first container setup and always-on; it passes
+-- through to the original when the flag is off, so the toggle works at
+-- runtime with zero teardown.
+-- ============================================================
+local _dfPrivateOnlyPatched = false
+local function EnsurePrivateOnlyDispelPatch()
+    if _dfPrivateOnlyPatched then return end
+    local mixin = _G.PrivateAuraAnchorContainerMixin
+    if type(mixin) ~= "table" then return end
+    local original = mixin.ShouldDisplayDispelIndicator
+    if type(original) ~= "function" then return end
+
+    mixin.ShouldDisplayDispelIndicator = function(self, aura)
+        -- Pass through when the feature flag isn't set on either mode.
+        -- Reading on every call is cheap (two table lookups) and lets
+        -- the setting toggle take effect without re-patching.
+        local partyDb = DF.db and DF.db.party
+        local raidDb  = DF.db and DF.db.raid
+        local privateOnly = (partyDb and partyDb.bossDebuffsContainerOverlayPrivateOnly)
+                         or (raidDb  and raidDb.bossDebuffsContainerOverlayPrivateOnly)
+        if privateOnly and aura and not aura.isPrivate then
+            return false
+        end
+        return original(self, aura)
+    end
+    _dfPrivateOnlyPatched = true
+end
+DF._EnsurePrivateOnlyDispelPatch = EnsurePrivateOnlyDispelPatch
 
 -- Pending updates queue (for changes made during combat)
 local pendingUpdates = {}
@@ -423,6 +505,10 @@ end
 SetupContainerOverlay = function(frame, unit, db)
     if not IS_CONTAINER_SUPPORTED then return end
     if not db.bossDebuffsContainerOverlayEnabled then return end
+
+    -- Install the private-only dispel filter patch on first use.
+    -- Idempotent; passes through when the db flag is disabled.
+    EnsurePrivateOnlyDispelPatch()
 
     -- Create or reuse the wrapper frame
     -- Parent to contentOverlay so the overlay renders above the health bar
