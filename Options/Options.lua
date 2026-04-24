@@ -5066,15 +5066,6 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             if DF.UpdateAllPrivateAuraVisibility then DF:UpdateAllPrivateAuraVisibility() end
             if DF.UpdateAllTestBossDebuffs then DF:UpdateAllTestBossDebuffs() end
         end), 30)
-        -- Workaround for a Blizzard crash in PrivateAuraUnitWatcher:HandleUpdateInfo
-        -- (Blizzard_PrivateAurasUI.lua:1211). Triggered whenever a private aura
-        -- anchor exists on a unit and Blizzard's internal lookup races the
-        -- aura removal. Default ON; disable only if the empty-aura fallback
-        -- causes visual side effects.
-        settingsGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Prevent Blizzard Private Aura Crash"], db, "bossDebuffsPrivateAuraCrashFix", function()
-            -- no re-setup needed — wrapper reads the flag on each call
-        end), 30)
-        settingsGroup:AddWidget(GUI:CreateLabel(self.child, "|cFF888888" .. L["Workaround for a Blizzard bug that spams Lua errors when private aura anchors are active. Turn off if it causes display issues."] .. "|r", 260), 38)
         local maxCount = settingsGroup:AddWidget(GUI:CreateSlider(self.child, L["Max Icons"], 1, 4, 1, db, "bossDebuffsMax", nil, function()
             if DF.RefreshAllPrivateAuraAnchors then DF:RefreshAllPrivateAuraAnchors() end
             if DF.UpdateAllTestBossDebuffs then DF:UpdateAllTestBossDebuffs() end
@@ -5327,16 +5318,6 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             if DF.PreviewPrivateAuraAnchors then DF:PreviewPrivateAuraAnchors() end
         end), 30)
         containerShowIcons.hideOn = HideContainerOverlayOptions
-
-        -- Private Auras Only — patches PrivateAuraAnchorContainerMixin so the
-        -- Blizzard dispel overlay fires only for private (boss) auras,
-        -- letting the regular Dispel Overlay handle everything else.
-        local containerPrivateOnly = containerGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Private Auras Only"], db, "bossDebuffsContainerOverlayPrivateOnly", function()
-            if DF.PreviewPrivateAuraAnchors then DF:PreviewPrivateAuraAnchors() end
-        end), 30)
-        containerPrivateOnly.hideOn = HideContainerOverlayOptions
-        local containerPrivateOnlyNote = containerGroup:AddWidget(GUI:CreateLabel(self.child, "|cFF888888" .. L["Hide Blizzard's overlay for non-private dispels (prevents overlap with the Dispel Overlay tab)."] .. "|r", 260), 32)
-        containerPrivateOnlyNote.hideOn = HideContainerOverlayOptions
 
         containerGroup.hideOn = HideBossDebuffOptions
         Add(containerGroup, nil, 2)

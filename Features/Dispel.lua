@@ -1551,11 +1551,6 @@ local function HideDispelAndInvalidate(frame)
     end
     RevertDispelNameText(frame)
     frame.dfLastDispelAuraID = nil
-    -- Regular overlay not firing → un-suppress the Blizzard container
-    -- dispel overlay (which may still want to show for private auras).
-    if frame.containerOverlayFrame then
-        frame.containerOverlayFrame:SetAlpha(1)
-    end
 end
 
 function DF:UpdateDispelOverlay(frame)
@@ -1757,20 +1752,6 @@ function DF:UpdateDispelOverlay(frame)
     --     and lastDispelType never changes for a given auraInstanceID.
     --   * Aura refreshes (updatedAuraInstanceIDs) keep the same
     --     auraInstanceID — dispel colors don't depend on duration/stacks.
-    -- Sync Blizzard container overlay visibility so it doesn't visually
-    -- stack with our regular dispel overlay when both would fire. Runs
-    -- every call (ahead of the fast-path skip below) so toggling the
-    -- bossDebuffsContainerOverlayPrivateOnly setting takes effect without
-    -- needing an aura-state change.
-    --
-    -- SetAlpha(0) on the wrapper hides the Blizzard-rendered dispel
-    -- overlay inside it. Private aura icon anchors are separate anchors
-    -- (not parented to this wrapper), so they're unaffected.
-    if frame.containerOverlayFrame then
-        local suppress = db.bossDebuffsContainerOverlayPrivateOnly and foundDispellable
-        frame.containerOverlayFrame:SetAlpha(suppress and 0 or 1)
-    end
-
     local newID = foundDispellable and lastDispellableID or nil
     if newID == frame.dfLastDispelAuraID then
         return  -- no change since last render; overlay is already correct

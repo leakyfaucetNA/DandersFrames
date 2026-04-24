@@ -846,7 +846,6 @@ DF.PartyDefaults = {
     bossDebuffsAnchor = "TOPLEFT",
     bossDebuffsBorderScale = 1,
     bossDebuffsEnabled = true,
-    bossDebuffsPrivateAuraCrashFix = true,
     bossDebuffsFrameLevel = 35,
     bossDebuffsGrowth = "RIGHT",
     bossDebuffsHideTooltip = false,
@@ -871,7 +870,6 @@ DF.PartyDefaults = {
     bossDebuffsContainerOverlayDispelMode = 2,
     bossDebuffsContainerOverlayGradientDir = 0,
     bossDebuffsContainerOverlayShowIcons = false,
-    bossDebuffsContainerOverlayPrivateOnly = false,
 
     -- Buff settings
     buffAlpha = 1,
@@ -2162,7 +2160,6 @@ DF.RaidDefaults = {
     bossDebuffsAnchor = "TOPLEFT",
     bossDebuffsBorderScale = 1,
     bossDebuffsEnabled = true,
-    bossDebuffsPrivateAuraCrashFix = true,
     bossDebuffsFrameLevel = 35,
     bossDebuffsGrowth = "RIGHT",
     bossDebuffsHideTooltip = false,
@@ -2187,7 +2184,6 @@ DF.RaidDefaults = {
     bossDebuffsContainerOverlayDispelMode = 2,
     bossDebuffsContainerOverlayGradientDir = 0,
     bossDebuffsContainerOverlayShowIcons = false,
-    bossDebuffsContainerOverlayPrivateOnly = false,
 
     -- Buff settings
     buffAlpha = 1,

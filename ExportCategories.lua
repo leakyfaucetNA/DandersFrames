@@ -418,8 +418,6 @@ DF.ExportCategories = {
         "bossDebuffsContainerOverlayDispelMode",
         "bossDebuffsContainerOverlayGradientDir",
         "bossDebuffsContainerOverlayShowIcons",
-        "bossDebuffsContainerOverlayPrivateOnly",
-        "bossDebuffsPrivateAuraCrashFix",
 
         -- Buff Filters
         "buffFilterCancelable",
