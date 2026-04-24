@@ -545,9 +545,13 @@ function DF:UpdateRange(frame)
     
     local unit = frame.unit
 
-    -- Player is always in range — skip all checks and cache logic
+    -- Player is always in range — skip all checks and cache logic.
+    -- dfInRange may hold a secret boolean from a previous UnitInRange
+    -- fallback (Midnight+), so check issecretvalue before boolean-testing
+    -- it — `not <secret>` raises "execution tainted" and spams errors.
     if UnitIsUnit(unit, "player") then
-        if not frame.dfInRange then
+        local dfSecret = issecretvalue and issecretvalue(frame.dfInRange)
+        if dfSecret or frame.dfInRange ~= true then
             frame.dfInRange = true
             if DF.UpdateRangeAppearance then
                 DF:UpdateRangeAppearance(frame)
@@ -557,7 +561,8 @@ function DF:UpdateRange(frame)
     end
 
     if not IsInGroup() and not IsInRaid() then
-        if not frame.dfInRange then
+        local dfSecret = issecretvalue and issecretvalue(frame.dfInRange)
+        if dfSecret or frame.dfInRange ~= true then
             frame.dfInRange = true
             if DF.UpdateRangeAppearance then
                 DF:UpdateRangeAppearance(frame)
@@ -790,6 +795,22 @@ rangeAnimGroup:SetScript("OnLoop", function()
             end
         end
     end
+
+    -- Pinned boss frames (work in both raid and party content — independent of group type).
+    -- Boss units don't fire UNIT_IN_RANGE_UPDATE, so polling is the only way to detect range.
+    if contentType and contentType ~= "arena" and DF.PinnedFrames and DF.PinnedFrames.bossFrames then
+        for setIndex = 1, 2 do
+            local frames = DF.PinnedFrames.bossFrames[setIndex]
+            if frames then
+                for i = 1, 8 do
+                    local f = frames[i]
+                    if f and f:IsShown() then
+                        RangeCheckFrame(f)
+                    end
+                end
+            end
+        end
+    end
 end)
 
 -- ============================================================
@@ -840,6 +861,22 @@ function rangeSubscriber:OnUnitInRange(event, unit)
                     local child = header:GetAttribute("child" .. i)
                     if child and child:IsShown() and child.unit == unit then
                         DF:UpdateRange(child)
+                    end
+                end
+            end
+        end
+    end
+
+    -- Pinned boss frames: UNIT_IN_RANGE_UPDATE doesn't fire for boss units in
+    -- practice, but register here as fallback coverage if Blizzard changes behavior.
+    if DF.PinnedFrames and DF.PinnedFrames.bossFrames then
+        for setIndex = 1, 2 do
+            local frames = DF.PinnedFrames.bossFrames[setIndex]
+            if frames then
+                for i = 1, 8 do
+                    local f = frames[i]
+                    if f and f:IsShown() and f.unit == unit then
+                        DF:UpdateRange(f)
                     end
                 end
             end

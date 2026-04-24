@@ -5,6 +5,8 @@ local addonName, DF = ...
 -- Uses SecureGroupHeaderTemplate with nameList for explicit control
 -- ============================================================
 
+local format = string.format
+
 local PinnedFrames = {}
 DF.PinnedFrames = PinnedFrames
 
@@ -13,7 +15,9 @@ PinnedFrames.containers = {}  -- [setIndex] = container frame
 PinnedFrames.headers = {}     -- [setIndex] = SecureGroupHeaderTemplate
 PinnedFrames.labels = {}      -- [setIndex] = label fontstring
 PinnedFrames.bossFrames = {}  -- [setIndex] = { [1..8] = boss frame }
-PinnedFrames.preview = { containers = {}, mode = nil }  -- Preview containers for editing inactive mode
+PinnedFrames.bossHandlers = {}  -- [setIndex] = SecureHandlerStateTemplate frame (drives fixed-slot allocator for boss frames)
+PinnedFrames.testFrames = {}    -- [setIndex] = { [1..N] = fake non-secure test frame (player-mode Test Mode)}
+PinnedFrames.testContainers = {} -- [setIndex] = non-secure container at the test-mode profile's position for this set
 PinnedFrames.initialized = false
 PinnedFrames.currentMode = nil  -- Track what mode we initialized for
 
@@ -363,9 +367,11 @@ function PinnedFrames:OnBossFramesChanged()
             self:UpdateBossFrameMapEntries(setIndex)
             self:RefreshChildFrames(setIndex)
 
-            -- Container resize modifies secure frame size — defer if in combat
+            -- Recompact positioning + container resize need out-of-combat
+            -- (both call SetPoint/SetSize on secure frames)
             C_Timer.After(0.05, function()
                 if not InCombatLockdown() then
+                    self:ApplyBossLayout(setIndex)
                     self:ResizeContainer(setIndex)
                 end
             end)
@@ -456,14 +462,201 @@ end
 -- FRAME CREATION
 -- ============================================================
 
+-- Create a SecureHandlerStateTemplate handler for this set's boss frames.
+-- The handler owns three allocator snippets (onBossShow, onBossHide,
+-- resetAllocState) plus a 0.25s GUID-swap poll. Each boss frame has its own
+-- SecureHandlerShowHideTemplate helper child; when the per-frame
+-- [@bossN,help]show;hide visibility driver flips, the helper's _onshow/_onhide
+-- run onBossShow/onBossHide on this handler via RunFor, passing bossIndex.
+-- Allocation + SetPoint happens inside the restricted environment, so in-combat
+-- repositioning is legal — unlike Lua-side SetPoint on SecureUnitButtonTemplate.
+-- Allocator state is stored as persistent frame attributes (slotTaken<N> on
+-- the handler, assignedSlot on each boss frame) rather than snippet globals,
+-- because restricted snippets get a fresh env per invocation.
+function PinnedFrames:CreateBossSecureHandler(setIndex, container, bossFrames)
+    if self.bossHandlers[setIndex] then return self.bossHandlers[setIndex] end
+    if InCombatLockdown() then return nil end
+
+    -- Handler is parented to the container and anchored to fill it, so
+    -- positions computed relative to the handler equal positions relative
+    -- to the container. The restricted environment only accepts SecureHandler*
+    -- frames as SetPoint targets, so we can't anchor to the plain container
+    -- directly — we anchor to the handler instead.
+    local handler = CreateFrame("Frame",
+        "DandersBossPositionHandler" .. setIndex,
+        container,
+        "SecureHandlerStateTemplate")
+    handler:SetAllPoints(container)
+    handler:Hide()
+
+    -- Frame refs for snippets: each boss frame addressable via
+    -- self:GetFrameRef("bossN"). Container ref isn't needed now that we
+    -- anchor to the handler.
+    for i = 1, 8 do
+        local f = bossFrames[i]
+        if f then
+            SecureHandlerSetFrameRef(handler, "boss" .. i, f)
+        end
+    end
+
+    -- Allocator state lives in persistent attributes because restricted-env
+    -- snippets get a fresh environment per invocation, so snippet-scoped
+    -- globals don't survive RunAttribute calls. We use:
+    --   handler attr "slotTaken<N>" (boolean) — which slots are in use
+    --   frame attr   "assignedSlot" (number)  — which slot this frame holds
+    -- Both auto-nil on first read, which correctly means "untaken/unassigned".
+
+    -- Pin the bossN frame to the lowest-numbered free slot. Re-uses existing
+    -- assignment if already set. Called from each boss frame's helper _onshow.
+    handler:SetAttribute("onBossShow", [[
+        local bossIndex = ...
+        local f = self:GetFrameRef("boss" .. bossIndex)
+        if not f then return end
+
+        local slot = tonumber(f:GetAttribute("assignedSlot"))
+        if not slot then
+            for i = 1, 8 do
+                if not self:GetAttribute("slotTaken" .. i) then
+                    slot = i
+                    break
+                end
+            end
+            if not slot then return end
+            self:SetAttribute("slotTaken" .. slot, true)
+            f:SetAttribute("assignedSlot", slot)
+        end
+
+        local anchor = self:GetAttribute("anchor") or "TOPLEFT"
+        local x = tonumber(self:GetAttribute("slot" .. slot .. "x")) or 0
+        local y = tonumber(self:GetAttribute("slot" .. slot .. "y")) or 0
+        f:ClearAllPoints()
+        f:SetPoint(anchor, self, anchor, x, y)
+    ]])
+
+    -- Release the slot on hide so future shows can reuse it. Other frames
+    -- keep their slot assignments (no compaction — matches Targeted List rules).
+    handler:SetAttribute("onBossHide", [[
+        local bossIndex = ...
+        local f = self:GetFrameRef("boss" .. bossIndex)
+        if not f then return end
+
+        local slot = tonumber(f:GetAttribute("assignedSlot"))
+        if slot then
+            self:SetAttribute("slotTaken" .. slot, false)
+            f:SetAttribute("assignedSlot", nil)
+        end
+    ]])
+
+    -- Invoked from Lua at combat end to wipe all slot assignments. Next
+    -- onBossShow cycle starts fresh from slot 1.
+    handler:SetAttribute("resetAllocState", [[
+        for i = 1, 8 do
+            self:SetAttribute("slotTaken" .. i, false)
+            local f = self:GetFrameRef("boss" .. i)
+            if f then f:SetAttribute("assignedSlot", nil) end
+        end
+    ]])
+
+    -- GUID-swap poll. Midnight 12.0 can silently reassign bossN to a new NPC
+    -- without firing UNIT_TARGETABLE_CHANGED / UNIT_FACTION (especially for
+    -- boss6-8). Poll every 0.25s and refresh any shown frame whose unit GUID
+    -- no longer matches what we cached at OnShow time. Matches Cell's pattern.
+    handler.dfBossGuidElapsed = 0
+    handler:SetScript("OnUpdate", function(self, elapsed)
+        self.dfBossGuidElapsed = (self.dfBossGuidElapsed or 0) + elapsed
+        if self.dfBossGuidElapsed < 0.25 then return end
+        self.dfBossGuidElapsed = 0
+
+        local frames = PinnedFrames.bossFrames[setIndex]
+        if not frames then return end
+        for i = 1, 8 do
+            local f = frames[i]
+            if f and f:IsShown() and f.unit then
+                local guid = UnitGUID(f.unit)
+                if guid and guid ~= f.dfLastBossGUID then
+                    f.dfLastBossGUID = guid
+                    if DF.ScanUnitFull then DF:ScanUnitFull(f.unit) end
+                    if DF.FullFrameRefresh then DF:FullFrameRefresh(f) end
+                end
+            end
+        end
+    end)
+
+    self.bossHandlers[setIndex] = handler
+
+    DF:Debug("PINNED", "Set %d created secure position handler", setIndex)
+
+    return handler
+end
+
+-- Push current layout settings into the secure handler's attributes.
+-- Must run out of combat (SetAttribute is restricted on secure frames in combat).
+function PinnedFrames:UpdateBossHandlerConfig(setIndex)
+    local handler = self.bossHandlers[setIndex]
+    local set = GetSetDB(setIndex)
+    if not handler or not set then return end
+    if InCombatLockdown() then return end
+
+    local db = IsInRaid() and DF:GetRaidDB() or DF:GetDB()
+    if not db then return end
+
+    local frameWidth    = db.frameWidth or 120
+    local frameHeight   = db.frameHeight or 50
+    local hSpacing      = set.horizontalSpacing or 2
+    local vSpacing      = set.verticalSpacing or 2
+    local unitsPerRow   = set.unitsPerRow or 5
+    local horizontal    = (set.growDirection == "HORIZONTAL")
+    local frameAnchor   = set.frameAnchor or "START"
+    local columnAnchor  = set.columnAnchor or "START"
+    local anchor        = GetContainerAnchorPoint(set)
+
+    handler:SetAttribute("anchor", anchor)
+
+    -- Size each boss frame to the current mode. SetSize on secure frames is
+    -- combat-restricted; we already bailed above on InCombatLockdown.
+    local frames = self.bossFrames[setIndex]
+    if frames then
+        for i = 1, 8 do
+            local f = frames[i]
+            if f then
+                f:SetSize(frameWidth, frameHeight)
+                f.isRaidFrame = IsInRaid()
+            end
+        end
+    end
+
+    -- Precompute (x, y) for each of the 8 slots. Slot 1 lives at the
+    -- container anchor; subsequent slots offset row-major by (xStep, yStep)
+    -- whose direction is dictated by frameAnchor/columnAnchor.
+    local xStep = frameWidth + hSpacing
+    local yStep = frameHeight + vSpacing
+
+    for slot = 1, 8 do
+        local slotIndex = slot - 1
+        local row = math.floor(slotIndex / unitsPerRow)
+        local col = slotIndex - row * unitsPerRow
+
+        local xOff, yOff
+        if horizontal then
+            if frameAnchor  == "END" then xOff = -col * xStep else xOff =  col * xStep end
+            if columnAnchor == "END" then yOff =  row * yStep else yOff = -row * yStep end
+        else
+            if frameAnchor  == "END" then yOff =  col * yStep else yOff = -col * yStep end
+            if columnAnchor == "END" then xOff = -row * xStep else xOff =  row * xStep end
+        end
+
+        handler:SetAttribute("slot" .. slot .. "x", xOff)
+        handler:SetAttribute("slot" .. slot .. "y", yOff)
+    end
+end
+
+
 -- Create 8 standalone SecureUnitButtonTemplate frames for a boss-mode set
 -- Parented to the container; unit attributes are hardcoded to boss1..boss8
 function PinnedFrames:CreateBossFrames(setIndex, container)
     if self.bossFrames[setIndex] then return end
     if InCombatLockdown() then
-        if DF.debugPinnedFrames then
-            print("|cFF00FFFF[DF Pinned]|r CreateBossFrames: In combat, cannot create frames!")
-        end
+        DF:DebugWarn("PINNED", "CreateBossFrames: in combat, cannot create frames")
         return
     end
 
@@ -488,44 +681,155 @@ function PinnedFrames:CreateBossFrames(setIndex, container)
             DF:InitializeHeaderChild(frame)
         end
 
-        -- State driver: show only when bossN exists and is friendly (healable)
+        -- Per-frame visibility state driver: shows the frame when bossN
+        -- exists AND is friendly. A SecureHandlerShowHideTemplate helper
+        -- child (created below) invokes the shared handler's
+        -- onBossShow/onBossHide snippets whenever this flips.
         RegisterStateDriver(frame, "visibility", "[@boss" .. i .. ",help]show;hide")
 
-        -- Register UNIT_AURA directly so boss frames populate the aura cache
-        frame:RegisterUnitEvent("UNIT_AURA", "boss" .. i)
+        -- Self-sufficient event system (ElvUI/oUF-style).
+        -- Register all unit-specific events directly on the frame with
+        -- `RegisterUnitEvent` so they're filtered at the C level — the handler
+        -- only fires when the event is for this frame's boss unit. No dispatcher
+        -- lookup needed. Each event routes to the appropriate DF update
+        -- function on `self`. This avoids "dispatcher forgot boss frames"
+        -- bugs because each frame listens for what it needs directly.
+        local bossUnit = "boss" .. i
+        frame:RegisterUnitEvent("UNIT_HEALTH", bossUnit)
+        frame:RegisterUnitEvent("UNIT_MAXHEALTH", bossUnit)
+        frame:RegisterUnitEvent("UNIT_MAX_HEALTH_MODIFIERS_CHANGED", bossUnit)
+        frame:RegisterUnitEvent("UNIT_POWER_UPDATE", bossUnit)
+        frame:RegisterUnitEvent("UNIT_MAXPOWER", bossUnit)
+        frame:RegisterUnitEvent("UNIT_DISPLAYPOWER", bossUnit)
+        frame:RegisterUnitEvent("UNIT_AURA", bossUnit)
+        frame:RegisterUnitEvent("UNIT_NAME_UPDATE", bossUnit)
+        frame:RegisterUnitEvent("UNIT_FACTION", bossUnit)
+        frame:RegisterUnitEvent("UNIT_ABSORB_AMOUNT_CHANGED", bossUnit)
+        frame:RegisterUnitEvent("UNIT_HEAL_ABSORB_AMOUNT_CHANGED", bossUnit)
+        frame:RegisterUnitEvent("UNIT_HEAL_PREDICTION", bossUnit)
+
         frame:SetScript("OnEvent", function(self, event, unit, updateInfo)
-            if event == "UNIT_AURA" and unit then
+            -- Skip work if hidden (state driver keeps us hidden when bossN
+            -- doesn't exist / isn't friendly, so events shouldn't really
+            -- fire then, but cheap to guard).
+            if not self:IsShown() then return end
+
+            if event == "UNIT_HEALTH"
+                    or event == "UNIT_MAXHEALTH"
+                    or event == "UNIT_MAX_HEALTH_MODIFIERS_CHANGED" then
+                if DF.UpdateHealthFast then DF:UpdateHealthFast(self) end
+
+            elseif event == "UNIT_POWER_UPDATE"
+                    or event == "UNIT_MAXPOWER"
+                    or event == "UNIT_DISPLAYPOWER" then
+                if DF.UpdatePower then DF:UpdatePower(self) end
+
+            elseif event == "UNIT_AURA" then
                 -- Populate aura cache (same logic as directModeSubscriber)
                 local cache = DF.AuraCache and DF.AuraCache[unit]
-                local needsFull = not updateInfo or updateInfo.isFullUpdate or not cache or not cache.hasFullScan
+                local needsFull = not updateInfo or updateInfo.isFullUpdate
+                    or not cache or not cache.hasFullScan
                 if needsFull then
                     if DF.ScanUnitFull then DF:ScanUnitFull(unit) end
                 else
-                    if DF.ApplyAuraDelta then
-                        if not DF:ApplyAuraDelta(unit, updateInfo) then
-                            if DF.ScanUnitFull then DF:ScanUnitFull(unit) end
-                        end
+                    if DF.ApplyAuraDelta and not DF:ApplyAuraDelta(unit, updateInfo) then
+                        if DF.ScanUnitFull then DF:ScanUnitFull(unit) end
                     end
                 end
-                -- Trigger the full filtered aura update pipeline (same path as party/raid frames)
+                -- Trigger the full filtered aura update pipeline (same path as
+                -- party/raid frames — applies filters, limits, dedup, etc.)
                 if DF.TriggerAuraUpdateForUnit then
                     DF:TriggerAuraUpdateForUnit(unit)
                 end
+
+            elseif event == "UNIT_NAME_UPDATE" then
+                if DF.UpdateName then DF:UpdateName(self) end
+
+            elseif event == "UNIT_FACTION" then
+                -- Faction change can flip friendly→hostile — full refresh
+                -- (state driver will then hide the frame if no longer friendly)
+                if DF.FullFrameRefresh then DF:FullFrameRefresh(self) end
+
+            elseif event == "UNIT_ABSORB_AMOUNT_CHANGED" then
+                if DF.UpdateAbsorb then DF:UpdateAbsorb(self) end
+
+            elseif event == "UNIT_HEAL_ABSORB_AMOUNT_CHANGED" then
+                if DF.UpdateHealAbsorb then DF:UpdateHealAbsorb(self) end
+
+            elseif event == "UNIT_HEAL_PREDICTION" then
+                if DF.UpdateHealPrediction then DF:UpdateHealPrediction(self) end
             end
         end)
 
-        -- OnShow hook: when state driver makes this frame visible, ensure
-        -- full initialization (Aura Designer state, icon pools, etc.)
+        -- OnShow hook: when state driver makes this frame visible, register in
+        -- unitFrameMap synchronously so UNIT_HEALTH/UNIT_AURA/etc. events route
+        -- here immediately (otherwise the health bar won't update until
+        -- OnBossFramesChanged's deferred registration fires).
         frame:HookScript("OnShow", function(self)
+            if DF.unitFrameMap and self.unit then
+                DF.unitFrameMap[self.unit] = self
+                self.dfEventsEnabled = true
+                self.dfLastBossGUID = UnitGUID(self.unit)
+            end
             C_Timer.After(0.1, function()
                 if self and self.unit and self:IsVisible() then
                     -- Populate aura cache for this unit if not yet done
                     if DF.ScanUnitFull then DF:ScanUnitFull(self.unit) end
                     -- Full refresh ensures Aura Designer BeginFrame/EnsureFrameState runs
                     if DF.FullFrameRefresh then DF:FullFrameRefresh(self) end
+                    self.dfLastBossGUID = UnitGUID(self.unit)
                 end
             end)
         end)
+
+        -- OnHide hook: clear Aura Designer state so the next OnShow reinitializes
+        -- from scratch. Without this, when a boss slot is reassigned to a new NPC,
+        -- the stale dfAD_* pools cause AD indicators to not apply on first render.
+        -- Also remove from unitFrameMap so events don't route to a hidden frame.
+        frame:HookScript("OnHide", function(self)
+            if DF.unitFrameMap and self.unit and DF.unitFrameMap[self.unit] == self then
+                DF.unitFrameMap[self.unit] = nil
+            end
+            self.dfEventsEnabled = false
+
+            -- Hide all AD indicator widgets before releasing the pool tables.
+            -- Without this, icons/squares/bars stay parented to the frame with
+            -- IsShown() == true, and reappear from the previous NPC when the
+            -- boss slot re-fills with a new unit.
+            if DF.AuraDesigner and DF.AuraDesigner.Indicators then
+                DF.AuraDesigner.Indicators:HideAll(self)
+            end
+
+            self.dfAD = nil
+            self.dfAD_icons = nil
+            self.dfAD_squares = nil
+            self.dfAD_bars = nil
+            self.dfAD_configVersion = nil
+            self.dfAD_activeInstanceIDs = nil
+            self.dfLastBossGUID = nil
+        end)
+
+        -- Secure helper that fires _onshow/_onhide inside the restricted
+        -- environment whenever this boss frame's visibility state driver
+        -- flips. Lets us run slot-allocator/reposition work (which calls
+        -- SetPoint on SecureUnitButtonTemplate frames) safely in combat.
+        local helper = CreateFrame("Frame", nil, frame, "SecureHandlerShowHideTemplate")
+        helper:SetAttribute("bossIndex", i)
+        helper:SetAttribute("_onshow", [[
+            local h = self:GetFrameRef("bossHandler")
+            if h then
+                self:RunFor(h, h:GetAttribute("onBossShow"),
+                    self:GetAttribute("bossIndex"))
+            end
+        ]])
+        helper:SetAttribute("_onhide", [[
+            local h = self:GetFrameRef("bossHandler")
+            if h then
+                self:RunFor(h, h:GetAttribute("onBossHide"),
+                    self:GetAttribute("bossIndex"))
+            end
+        ]])
+        frame.bossHelper = helper
 
         -- Register with click-casting system
         if ClickCastFrames then
@@ -538,9 +842,21 @@ function PinnedFrames:CreateBossFrames(setIndex, container)
 
     self.bossFrames[setIndex] = frames
 
-    if DF.debugPinnedFrames then
-        print("|cFF00FFFF[DF Pinned]|r Set", setIndex, "created 8 boss frames")
+    -- Secure handler that repositions these frames compactly, even in combat
+    self:CreateBossSecureHandler(setIndex, container, frames)
+
+    -- Wire each helper's bossHandler frame ref now that the handler exists.
+    local handler = self.bossHandlers[setIndex]
+    if handler then
+        for i = 1, 8 do
+            local f = frames[i]
+            if f and f.bossHelper then
+                SecureHandlerSetFrameRef(f.bossHelper, "bossHandler", handler)
+            end
+        end
     end
+
+    DF:Debug("PINNED", "Set %d created 8 boss frames", setIndex)
 end
 
 function PinnedFrames:CreateSetFrames(setIndex)
@@ -548,9 +864,7 @@ function PinnedFrames:CreateSetFrames(setIndex)
     
     -- CRITICAL: Cannot create frames during combat
     if InCombatLockdown() then
-        if DF.debugPinnedFrames then
-            print("|cFF00FFFF[DF Pinned]|r CreateSetFrames: In combat, cannot create frames!")
-        end
+        DF:DebugWarn("PINNED", "CreateSetFrames: in combat, cannot create frames")
         return
     end
     
@@ -692,6 +1006,15 @@ function PinnedFrames:CreateSetFrames(setIndex)
         local s = container:GetScale() or 1
         container:ClearAllPoints()
         container:SetPoint(anchor, UIParent, anchor, finalX / s, finalY / s)
+
+        -- If Test Mode is active, re-sync test container(s) to the new position.
+        -- The drag updated the current mode's set.position; the test container
+        -- may or may not be using this mode's config, but refreshing is cheap
+        -- and ensures alignment either way.
+        if PinnedFrames.testModeActive and PinnedFrames.ExitTestMode then
+            PinnedFrames:ExitTestMode()
+            PinnedFrames:EnterTestMode()
+        end
     end)
     
     -- Mover shows when unlocked AND enabled
@@ -766,14 +1089,12 @@ function PinnedFrames:CreateSetFrames(setIndex)
     -- Initial nameList (may be empty, that's ok now - frames are created)
     self:UpdateHeaderNameList(setIndex)
     
-    if DF.debugPinnedFrames then
-        -- Debug: count created children
-        local count = 0
-        for i = 1, 40 do
-            if header:GetAttribute("child" .. i) then count = count + 1 end
-        end
-        print("|cFF00FFFF[DF Pinned]|r Set", setIndex, "created", count, "child frames")
+    -- Count created children for debug log (fast — 40 attribute lookups)
+    local childCount = 0
+    for i = 1, 40 do
+        if header:GetAttribute("child" .. i) then childCount = childCount + 1 end
     end
+    DF:Debug("PINNED", "Set %d created %d child frames", setIndex, childCount)
     
     -- Show/hide based on enabled state
     if set.enabled then
@@ -829,16 +1150,9 @@ function PinnedFrames:UpdateHeaderNameList(setIndex)
     
     local nameList = BuildNameList(validRosterNames)
     
-    if DF.debugPinnedFrames then
-        print("|cFF00FFFF[DF Pinned]|r Set", setIndex, "updating nameList")
-        print("|cFF00FFFF[DF Pinned]|r   Players in set:", #set.players)
-        print("|cFF00FFFF[DF Pinned]|r   Valid (in group):", #validRosterNames)
-        print("|cFF00FFFF[DF Pinned]|r   nameList:", nameList ~= "" and nameList or "(empty)")
-        for i, p in ipairs(set.players) do
-            local rosterName = IsPlayerInGroup(p, roster)
-            print("|cFF00FFFF[DF Pinned]|r     [" .. i .. "]", p, rosterName and ("-> " .. rosterName) or "(NOT in group)")
-        end
-    end
+    DF:Debug("PINNED", "Set %d updating nameList (%d players in set, %d valid, list=%s)",
+        setIndex, #set.players, #validRosterNames,
+        nameList ~= "" and nameList or "(empty)")
     
     -- Only update if not in combat
     if InCombatLockdown() then
@@ -884,6 +1198,16 @@ function PinnedFrames:ApplyLayoutSettings(setIndex)
     if not set then return end
     if InCombatLockdown() then return end
 
+    -- Refresh Test Mode frames regardless of frame type. Cheapest correct
+    -- approach: full Exit+Enter cycle, same as the test count slider uses.
+    -- Settings panel slider drags fire at keyboard-repeat rate, but Exit+Enter
+    -- is lightweight (just shows/hides non-secure frames and re-applies
+    -- layout math — no allocations beyond first use).
+    if self.testModeActive then
+        self:ExitTestMode()
+        self:EnterTestMode()
+    end
+
     if IsBossSet(set) then
         self:ApplyBossLayout(setIndex)
         self:ResizeContainer(setIndex)
@@ -895,9 +1219,7 @@ function PinnedFrames:ApplyLayoutSettings(setIndex)
     
     local db = IsInRaid() and DF:GetRaidDB() or DF:GetDB()
     if not db then
-        if DF.debugPinnedFrames then
-            print("|cFF00FFFF[DF Pinned]|r ApplyLayoutSettings: db is nil!")
-        end
+        DF:DebugError("PINNED", "ApplyLayoutSettings: db is nil")
         return
     end
     
@@ -1008,14 +1330,9 @@ function PinnedFrames:ApplyLayoutSettings(setIndex)
         end
     end
     
-    if DF.debugPinnedFrames then
-        print("|cFF00FFFF[DF Pinned]|r ApplyLayoutSettings set", setIndex)
-        print("|cFF00FFFF[DF Pinned]|r   horizontal:", horizontal)
-        print("|cFF00FFFF[DF Pinned]|r   frameAnchor:", frameAnchor, "columnAnchor:", columnAnchor)
-        print("|cFF00FFFF[DF Pinned]|r   containerAnchor:", containerAnchorPoint)
-        print("|cFF00FFFF[DF Pinned]|r   frameSize:", frameWidth, "x", frameHeight)
-        print("|cFF00FFFF[DF Pinned]|r   spacing:", hSpacing, vSpacing)
-    end
+    DF:Debug("PINNED", "ApplyLayoutSettings set=%d horizontal=%s frameAnchor=%s columnAnchor=%s containerAnchor=%s size=%dx%d spacing=%d,%d",
+        setIndex, tostring(horizontal), tostring(frameAnchor), tostring(columnAnchor),
+        tostring(containerAnchorPoint), frameWidth, frameHeight, hSpacing, vSpacing)
     
     -- ============================================================
     -- CRITICAL: 4-step refresh to force repositioning
@@ -1052,42 +1369,15 @@ end
 -- Manually position boss frames in a grid matching the set's layout settings
 -- Called when layout settings change or boss visibility changes
 function PinnedFrames:ApplyBossLayout(setIndex)
-    local frames = self.bossFrames[setIndex]
     local set = GetSetDB(setIndex)
     local container = self.containers[setIndex]
-
-    if not frames or not set or not container then return end
+    if not set or not container then return end
     if InCombatLockdown() then return end
 
-    local db = IsInRaid() and DF:GetRaidDB() or DF:GetDB()
-    if not db then return end
-
-    local frameWidth = db.frameWidth or 120
-    local frameHeight = db.frameHeight or 50
-
-    -- Resize all frames to current mode's dimensions
-    for i = 1, 8 do
-        local f = frames[i]
-        if f then
-            f:SetSize(frameWidth, frameHeight)
-            f.isRaidFrame = IsInRaid()
-        end
-    end
-
-    local horizontal = set.growDirection == "HORIZONTAL"
-    local hSpacing = set.horizontalSpacing or 2
-    local vSpacing = set.verticalSpacing or 2
-    local unitsPerRow = set.unitsPerRow or 5
-    local frameAnchor = set.frameAnchor or "START"
-    local columnAnchor = set.columnAnchor or "START"
-
-    -- Determine corner to anchor from (matches GetContainerAnchorPoint logic)
+    -- Container anchor + scale + saved position handling.
     local anchor = GetContainerAnchorPoint(set)
-
-    -- Apply scale
     container:SetScale(set.scale or 1.0)
 
-    -- Restore/apply saved position
     local pos = set.position
     if pos then
         local savedAnchor = pos.point or anchor
@@ -1106,45 +1396,30 @@ function PinnedFrames:ApplyBossLayout(setIndex)
         pos.point = anchor
     end
 
-    -- Layout the 8 boss frames in a grid
-    for i = 1, 8 do
-        local f = frames[i]
-        if f then
-            local row = math.floor((i - 1) / unitsPerRow)
-            local col = (i - 1) % unitsPerRow
+    -- Push slot coords + sizes to the secure handler. The allocator snippet
+    -- reads these whenever a boss frame becomes visible.
+    self:UpdateBossHandlerConfig(setIndex)
 
-            local xOff, yOff
-            if horizontal then
-                local xStep = frameWidth + hSpacing
-                local yStep = frameHeight + vSpacing
-                if frameAnchor == "END" then
-                    xOff = -col * xStep
-                else
-                    xOff = col * xStep
-                end
-                if columnAnchor == "END" then
-                    yOff = row * yStep
-                else
-                    yOff = -row * yStep
-                end
-            else
-                local xStep = frameWidth + hSpacing
-                local yStep = frameHeight + vSpacing
-                if frameAnchor == "END" then
-                    yOff = col * yStep
-                else
-                    yOff = -col * yStep
-                end
-                if columnAnchor == "END" then
-                    xOff = -row * xStep
-                else
-                    xOff = row * xStep
+    -- Re-anchor any already-visible frames to their current slot coords so
+    -- live layout changes (spacing, size, anchor) take effect immediately
+    -- without waiting for the next Show event.
+    local handler = self.bossHandlers[setIndex]
+    if handler then
+        handler:Execute([[
+            local anchor = self:GetAttribute("anchor") or "TOPLEFT"
+            for i = 1, 8 do
+                local f = self:GetFrameRef("boss" .. i)
+                if f then
+                    local slot = tonumber(f:GetAttribute("assignedSlot"))
+                    if slot then
+                        local x = tonumber(self:GetAttribute("slot" .. slot .. "x")) or 0
+                        local y = tonumber(self:GetAttribute("slot" .. slot .. "y")) or 0
+                        f:ClearAllPoints()
+                        f:SetPoint(anchor, self, anchor, x, y)
+                    end
                 end
             end
-
-            f:ClearAllPoints()
-            f:SetPoint(anchor, container, anchor, xOff, yOff)
-        end
+        ]])
     end
 end
 
@@ -1284,9 +1559,7 @@ function PinnedFrames:RefreshChildFrames(setIndex)
         end
     end
 
-    if DF.debugPinnedFrames then
-        print("|cFF00FFFF[DF Pinned]|r Set", setIndex, "refreshed all child frames")
-    end
+    DF:Debug("PINNED", "Set %d refreshed all child frames", setIndex)
 end
 
 function PinnedFrames:SetEnabled(setIndex, enabled)
@@ -1357,9 +1630,7 @@ function PinnedFrames:SetLocked(setIndex, locked)
     if not locked and InCombatLockdown() then
         self.pendingUnlock = self.pendingUnlock or {}
         self.pendingUnlock[setIndex] = true
-        if DF.debugPinnedFrames then
-            print("|cFF00FFFF[DF Pinned]|r Set", setIndex, "unlock queued until after combat")
-        end
+        DF:Debug("PINNED", "Set %d unlock queued until after combat", setIndex)
         return
     end
     
@@ -1397,9 +1668,7 @@ function PinnedFrames:LockAllForCombat()
                 container.mover:Hide()
             end
             
-            if DF.debugPinnedFrames then
-                print("|cFF00FFFF[DF Pinned]|r Set", i, "auto-locked for combat")
-            end
+            DF:Debug("PINNED", "Set %d auto-locked for combat", i)
         end
     end
 end
@@ -1456,277 +1725,13 @@ function PinnedFrames:UpdateLabel(setIndex)
     label:SetText(labelText)
 end
 
--- ============================================================
--- PREVIEW CONTAINERS (for editing inactive mode's position)
--- Created when the options panel is open to a mode that differs
--- from the actual game mode, so users can reposition pinned frames
--- for that mode without joining a raid/party. Previews are purely
--- visual — no SecureGroupHeader, no child frames — just a sized
--- placeholder box plus a drag handle.
--- ============================================================
-
--- Compute preview container size from the preview mode's DB
-local function CalcPreviewSize(modeDb, set)
-    local frameWidth = modeDb.frameWidth or 120
-    local frameHeight = modeDb.frameHeight or 50
-
-    local count
-    if IsBossSet(set) then
-        -- Bosses are only known mid-encounter; ResizeContainer falls back to a
-        -- single-frame placeholder when no boss is visible, so mirror that.
-        count = 1
-    else
-        count = (set.players and #set.players) or 0
-    end
-    if count < 1 then count = 1 end
-
-    local horizontal = set.growDirection == "HORIZONTAL"
-    local hSpacing = set.horizontalSpacing or 2
-    local vSpacing = set.verticalSpacing or 2
-    local unitsPerRow = set.unitsPerRow or 5
-
-    local rows = math.ceil(count / unitsPerRow)
-    local cols = math.min(count, unitsPerRow)
-
-    local width, height
-    if horizontal then
-        width = cols * frameWidth + (cols - 1) * hSpacing
-        height = rows * frameHeight + (rows - 1) * vSpacing
-    else
-        width = rows * frameWidth + (rows - 1) * hSpacing
-        height = cols * frameHeight + (cols - 1) * vSpacing
-    end
-
-    return math.max(width, 50), math.max(height, 30)
-end
-
--- Build label string for a preview, e.g. "Pinned 1  (Raid preview)"
-local function BuildPreviewLabel(set, setIndex, isRaid)
-    local labelText = set.name
-    if not labelText or labelText == "" then
-        labelText = "Pinned " .. setIndex
-    end
-    return labelText .. "  |cffaaaaaa(" .. (isRaid and "Raid" or "Party") .. " preview)|r"
-end
-
--- Create a preview container for setIndex showing `mode`'s settings
-function PinnedFrames:CreatePreviewSet(setIndex, mode)
-    local modeDb = DF.db and DF.db[mode]
-    if not modeDb or not modeDb.pinnedFrames then return end
-    local set = modeDb.pinnedFrames.sets and modeDb.pinnedFrames.sets[setIndex]
-    if not set then return end
-
-    local isRaid = (mode == "raid")
-    local colors = GetModeColors(isRaid)
-
-    local container = CreateFrame("Frame", nil, UIParent)
-    container:SetFrameStrata("MEDIUM")
-    container:SetClampedToScreen(true)
-
-    local initScale = set.scale or 1.0
-    container:SetScale(initScale)
-
-    local w, h = CalcPreviewSize(modeDb, set)
-    container:SetSize(w, h)
-
-    local anchor = GetContainerAnchorPoint(set)
-    local pos = set.position or { point = anchor, x = 0, y = 200 * (setIndex == 1 and 1 or -1) }
-    local useAnchor = pos.point or anchor
-    container:ClearAllPoints()
-    container:SetPoint(useAnchor, UIParent, useAnchor, (pos.x or 0) / initScale, (pos.y or 0) / initScale)
-
-    -- Background fill
-    container.bg = container:CreateTexture(nil, "BACKGROUND")
-    container.bg:SetAllPoints()
-    container.bg:SetColorTexture(unpack(colors.containerBg))
-
-    -- Border
-    container.border = CreateFrame("Frame", nil, container, "BackdropTemplate")
-    container.border:SetAllPoints()
-    container.border:SetBackdrop({
-        edgeFile = "Interface\\Buttons\\WHITE8x8",
-        edgeSize = 1,
-    })
-    container.border:SetBackdropBorderColor(unpack(colors.containerBorder))
-
-    -- Mover frame (parented to UIParent for scale independence)
-    local mover = CreateFrame("Frame", nil, UIParent)
-    mover:SetSize(140, 16)
-    mover:SetFrameStrata("HIGH")
-    mover:SetPoint("BOTTOM", container, "TOP", 0, 2)
-
-    mover.bg = mover:CreateTexture(nil, "BACKGROUND")
-    mover.bg:SetAllPoints()
-    mover.bg:SetColorTexture(unpack(colors.moverBg))
-
-    mover.border = mover:CreateTexture(nil, "BORDER")
-    mover.border:SetAllPoints()
-    mover.border:SetColorTexture(unpack(colors.moverBorder))
-
-    local moverInner = mover:CreateTexture(nil, "ARTWORK")
-    moverInner:SetPoint("TOPLEFT", 1, -1)
-    moverInner:SetPoint("BOTTOMRIGHT", -1, 1)
-    moverInner:SetColorTexture(unpack(colors.moverBg))
-
-    mover.text = mover:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    mover.text:SetPoint("CENTER")
-    mover.text:SetText((isRaid and "Raid" or "Party") .. " Preview — Drag")
-    mover.text:SetTextColor(unpack(colors.moverText))
-
-    mover:EnableMouse(true)
-    mover:RegisterForDrag("LeftButton")
-
-    local startMouseX, startMouseY, startPosX, startPosY
-
-    mover:SetScript("OnDragStart", function(self)
-        local dragAnchor = GetContainerAnchorPoint(set)
-        local uiScale = UIParent:GetEffectiveScale()
-        startMouseX, startMouseY = GetCursorPosition()
-        startMouseX = startMouseX / uiScale
-        startMouseY = startMouseY / uiScale
-        local p = set.position or { x = 0, y = 0 }
-        startPosX = p.x or 0
-        startPosY = p.y or 0
-        self:SetScript("OnUpdate", function()
-            local mx, my = GetCursorPosition()
-            local ps = UIParent:GetEffectiveScale()
-            mx = mx / ps
-            my = my / ps
-            local newX = startPosX + (mx - startMouseX)
-            local newY = startPosY + (my - startMouseY)
-            local s = container:GetScale() or 1
-            container:ClearAllPoints()
-            container:SetPoint(dragAnchor, UIParent, dragAnchor, newX / s, newY / s)
-        end)
-    end)
-
-    mover:SetScript("OnDragStop", function(self)
-        self:SetScript("OnUpdate", nil)
-        if not startMouseX then return end
-        local dragAnchor = GetContainerAnchorPoint(set)
-        local uiScale = UIParent:GetEffectiveScale()
-        local mx, my = GetCursorPosition()
-        mx = mx / uiScale
-        my = my / uiScale
-        local finalX = startPosX + (mx - startMouseX)
-        local finalY = startPosY + (my - startMouseY)
-        set.position = { point = dragAnchor, x = finalX, y = finalY }
-        local s = container:GetScale() or 1
-        container:ClearAllPoints()
-        container:SetPoint(dragAnchor, UIParent, dragAnchor, finalX / s, finalY / s)
-    end)
-
-    -- Label above the mover
-    local label = UIParent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    label:SetPoint("BOTTOM", mover, "TOP", 0, 2)
-    label:SetText(BuildPreviewLabel(set, setIndex, isRaid))
-    label:SetTextColor(unpack(colors.moverText))
-
-    container.mover = mover
-    container.label = label
-    container.previewMode = mode
-    container.previewSet = set
-
-    -- Match the real container's visibility rules so the preview reflects the
-    -- edited set's enabled/locked/showLabel state.
-    local enabled = set.enabled ~= false
-    container:SetShown(enabled)
-    mover:SetShown(enabled and not set.locked)
-    label:SetShown(enabled and set.showLabel)
-
-    self.preview.containers[setIndex] = container
-end
-
--- Refresh a preview set's size/position/label after settings change
-function PinnedFrames:UpdatePreviewSet(setIndex)
-    if not self.preview or not self.preview.mode then return end
-    local c = self.preview.containers and self.preview.containers[setIndex]
-    if not c then return end
-
-    local mode = self.preview.mode
-    local modeDb = DF.db and DF.db[mode]
-    if not modeDb or not modeDb.pinnedFrames then return end
-    local set = modeDb.pinnedFrames.sets and modeDb.pinnedFrames.sets[setIndex]
-    if not set then return end
-
-    -- Scale
-    c:SetScale(set.scale or 1.0)
-
-    -- Size
-    local w, h = CalcPreviewSize(modeDb, set)
-    c:SetSize(w, h)
-
-    -- Reposition (convert if anchor changed)
-    local anchor = GetContainerAnchorPoint(set)
-    local pos = set.position
-    if pos then
-        local savedAnchor = pos.point or anchor
-        if savedAnchor ~= anchor and c:GetLeft() then
-            local newX, newY = ConvertAnchorPosition(c, savedAnchor, anchor)
-            if newX and newY then
-                local cs = c:GetScale() or 1
-                pos.point = anchor
-                pos.x = newX * cs
-                pos.y = newY * cs
-            end
-        end
-        c:ClearAllPoints()
-        local s = c:GetScale() or 1
-        c:SetPoint(anchor, UIParent, anchor, (pos.x or 0) / s, (pos.y or 0) / s)
-        pos.point = anchor
-    end
-
-    -- Refresh label text and visibility
-    local enabled = set.enabled ~= false
-    c:SetShown(enabled)
-    if c.mover then
-        c.mover:SetShown(enabled and not set.locked)
-    end
-    if c.label then
-        c.label:SetText(BuildPreviewLabel(set, setIndex, mode == "raid"))
-        c.label:SetShown(enabled and set.showLabel)
-    end
-end
-
--- Show previews for the given mode (or hide if mode matches actual)
-function PinnedFrames:ShowPreview(mode)
-    if not mode or mode == GetActualMode() then
-        self:HidePreview()
-        return
-    end
-
-    -- Already showing for this mode -- just refresh layouts
-    if self.preview and self.preview.mode == mode and self.preview.containers then
-        for i = 1, 2 do self:UpdatePreviewSet(i) end
-        return
-    end
-
-    -- Rebuild
-    self:HidePreview()
-    self.preview = self.preview or { containers = {} }
-    self.preview.containers = {}
-    self.preview.mode = mode
-    for i = 1, 2 do
-        self:CreatePreviewSet(i, mode)
-    end
-end
-
-function PinnedFrames:HidePreview()
-    if self.preview and self.preview.containers then
-        for i = 1, 2 do
-            local c = self.preview.containers[i]
-            if c then
-                if c.mover then c.mover:Hide() end
-                if c.label then c.label:Hide() end
-                c:Hide()
-            end
-            self.preview.containers[i] = nil
-        end
-    end
-    if self.preview then
-        self.preview.mode = nil
-    end
-end
+-- Backwards-compat stubs for the old preview-container system (removed in
+-- favour of Test Mode, which does the same job with fake frames). These
+-- no-ops keep external callers (Options.lua) working until their calls are
+-- cleaned up; safe to remove once all callsites are updated.
+function PinnedFrames:ShowPreview(_) end
+function PinnedFrames:HidePreview() end
+function PinnedFrames:UpdatePreviewSet(_) end
 
 -- ============================================================
 -- INITIALIZATION
@@ -1737,38 +1742,29 @@ function PinnedFrames:Initialize()
     
     -- CRITICAL: Cannot create frames during combat
     if InCombatLockdown() then
-        if DF.debugPinnedFrames then
-            print("|cFF00FFFF[DF Pinned]|r Initialize: In combat, deferring...")
-        end
+        DF:DebugWarn("PINNED", "Initialize: in combat, deferring")
         self.pendingInitialize = true
         return
     end
-    
+
     -- Check if DB is ready - if not during ADDON_LOADED, defer to pending
     if not DF.db then
-        if DF.debugPinnedFrames then
-            print("|cFF00FFFF[DF Pinned]|r Initialize: DF.db not ready, setting pendingInitialize")
-        end
+        DF:DebugWarn("PINNED", "Initialize: DF.db not ready, deferring")
         self.pendingInitialize = true
         return
     end
-    
+
     -- Track what mode we're initializing for
     self.currentMode = GetActualMode()
-    
+
     -- Check if pinnedFrames config exists
     local hlDB = GetPinnedDB()
     if not hlDB then
-        if DF.debugPinnedFrames then
-            print("|cFF00FFFF[DF Pinned]|r Initialize: No pinnedFrames config found!")
-        end
+        DF:DebugError("PINNED", "Initialize: no pinnedFrames config found")
         return
     end
-    
-    if DF.debugPinnedFrames then
-        print("|cFF00FFFF[DF Pinned]|r Initializing pinned frames...")
-        print("|cFF00FFFF[DF Pinned]|r   Mode:", self.currentMode)
-    end
+
+    DF:Debug("PINNED", "Initializing pinned frames (mode=%s)", tostring(self.currentMode))
     
     -- Create frames for both sets
     for i = 1, 2 do
@@ -1788,24 +1784,41 @@ function PinnedFrames:Initialize()
         end
     end
     
-    if DF.debugPinnedFrames then
-        print("|cFF00FFFF[DF Pinned]|r Initialized pinned frames")
-    end
+    DF:Debug("PINNED", "Initialized pinned frames")
 end
 
 -- Reinitialize for mode change (party <-> raid)
 function PinnedFrames:Reinitialize()
     -- Cannot reinitialize during combat
     if InCombatLockdown() then
-        if DF.debugPinnedFrames then
-            print("|cFF00FFFF[DF Pinned]|r Reinitialize: In combat, deferring...")
-        end
+        DF:DebugWarn("PINNED", "Reinitialize: in combat, deferring")
         self.pendingReinitialize = true
         return
     end
     
     -- Clean up old frames
     for i = 1, 2 do
+        if self.bossHandlers[i] then
+            self.bossHandlers[i]:Hide()
+            self.bossHandlers[i] = nil
+        end
+        -- Destroy player-mode test frame pool (non-secure, safe to hide+nil)
+        if self.testFrames[i] then
+            for _, f in ipairs(self.testFrames[i]) do
+                if f then f:Hide() end
+            end
+            self.testFrames[i] = nil
+        end
+        if self.testContainers[i] then
+            if self.testContainers[i].testMover then
+                self.testContainers[i].testMover:Hide()
+            end
+            if self.testContainers[i].testLabel then
+                self.testContainers[i].testLabel:Hide()
+            end
+            self.testContainers[i]:Hide()
+            self.testContainers[i] = nil
+        end
         if self.bossFrames[i] then
             for j = 1, 8 do
                 local f = self.bossFrames[i][j]
@@ -1837,11 +1850,12 @@ function PinnedFrames:Reinitialize()
     self.initialized = false
     self:Initialize()
 
-    -- Re-evaluate preview visibility after a mode change:
-    -- if the previewed mode is now the actual mode, previews become redundant
-    -- and ShowPreview() will hide them automatically.
-    if self.preview and self.preview.mode then
-        self:ShowPreview(self.preview.mode)
+    -- If Test Mode was active before Reinitialize (e.g. user changed
+    -- frame type in the settings panel while test mode was on), re-enter
+    -- it so fresh test frames are rendered for the new frame type.
+    if self.testModeActive then
+        self.testModeActive = false  -- ExitTestMode is a no-op in this state
+        self:EnterTestMode()
     end
 end
 
@@ -1962,6 +1976,37 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
             end
             PinnedFrames.pendingVisibilityUpdate = nil
         end
+
+        -- Reset slot allocator + reapply layout now that we're out of combat.
+        -- Fresh pull starts with all slots free; any frames still visible
+        -- (rare — e.g. we left combat mid-add) re-enter via onBossShow.
+        if PinnedFrames.initialized then
+            for setIndex = 1, 2 do
+                local set = GetSetDB(setIndex)
+                if set and set.enabled and IsBossSet(set) then
+                    local handler = PinnedFrames.bossHandlers[setIndex]
+                    if handler then
+                        handler:Execute([[ self:RunAttribute("resetAllocState") ]])
+                    end
+                    PinnedFrames:ApplyBossLayout(setIndex)
+                    PinnedFrames:ResizeContainer(setIndex)
+
+                    -- Re-claim slots for any frames still visible post-reset.
+                    -- Single Execute call runs a loop inside the restricted env
+                    -- rather than 8 separate interpolated snippets.
+                    if handler then
+                        handler:Execute([[
+                            for i = 1, 8 do
+                                local f = self:GetFrameRef("boss" .. i)
+                                if f and f:IsShown() then
+                                    self:RunAttribute("onBossShow", i)
+                                end
+                            end
+                        ]])
+                    end
+                end
+            end
+        end
         return
     end
     
@@ -1995,9 +2040,8 @@ eventFrame:SetScript("OnEvent", function(self, event, arg1, ...)
         -- Check if mode changed (party <-> raid)
         local actualMode = GetActualMode()
         if PinnedFrames.currentMode and actualMode ~= PinnedFrames.currentMode then
-            if DF.debugPinnedFrames then
-                print("|cFF00FFFF[DF Pinned]|r Mode changed from", PinnedFrames.currentMode, "to", actualMode, "- reinitializing")
-            end
+            DF:Debug("PINNED", "Mode changed from %s to %s — reinitializing",
+                tostring(PinnedFrames.currentMode), tostring(actualMode))
             PinnedFrames:Reinitialize()
             return
         end
@@ -2135,24 +2179,832 @@ function PinnedFrames:Test()
     print("|cFF00FFFF[DF Pinned]|r Run /dfpinned info to see details")
 end
 
+-- ============================================================
+-- TEST MODE INTEGRATION
+-- Hooks called by TestMode/TestMode.lua when the main Test Mode
+-- button is toggled. Populates ENABLED pinned sets with fake data:
+--   Boss-mode sets: the real secure boss frames get dfIsTestFrame + fake NPC data
+--   Player-mode sets: non-secure test Buttons are created per set container
+--                      with fake roster data (names/classes/health)
+-- Disabled sets are never touched.
+-- ============================================================
+
+-- Returns true if any pinned set is currently in test mode
+function PinnedFrames:IsTestModeActive()
+    return self.testModeActive == true
+end
+
+-- Returns the pinnedFrames sub-table for a specific mode ("raid" or "party").
+-- Allows test-mode code to read the raid profile's pinned config while the
+-- actual group state is solo/party, and vice versa.
+local function GetPinnedDBForMode(isRaidMode)
+    local db = isRaidMode and DF:GetRaidDB() or DF:GetDB()
+    return db and db.pinnedFrames
+end
+
+-- Returns a set's config from the specified mode's profile.
+local function GetSetDBForMode(setIndex, isRaidMode)
+    local hlDB = GetPinnedDBForMode(isRaidMode)
+    return hlDB and hlDB.sets and hlDB.sets[setIndex]
+end
+
+-- Create a single non-secure player-mode test frame parented to a pinned
+-- set's test container. Mirrors the pattern used in TestMode/TestFramePool.lua
+-- CreateTestFrame so the frame renders identically to live frames.
+-- Create a single non-secure "mock" test frame for a pinned set, parented to
+-- the set's test container. Handles both player-mode and boss-mode sets —
+-- when isBossSet is true, the `isPinnedBossFrame` marker causes
+-- DF:UpdateTestFrame to route to boss test data (NPC names via
+-- GetTestUnitData(i, isRaid, true)).
+local function CreatePlayerTestFrame(setIndex, index, container, isRaidMode, isBossSet)
+    local db = isRaidMode and DF:GetRaidDB() or DF:GetDB()
+    local frame = CreateFrame(
+        "Button",
+        "DandersPinnedTest" .. setIndex .. "_" .. index,
+        container
+    )
+    frame:SetSize(db.frameWidth or 120, db.frameHeight or 50)
+
+    frame.index = index
+    frame.dfTestIndex = index
+    frame.isRaidFrame = isRaidMode
+    frame.dfIsTestFrame = true
+    frame.dfIsDandersFrame = true
+    frame.dfIsPinnedTestFrame = true  -- distinguish from testPartyFrames/testRaidFrames
+    frame.isPinnedBossFrame = isBossSet or false
+    frame.pinnedSetIndex = setIndex
+
+    -- Fake unit token. For boss-mode test frames we use boss1..boss8 for
+    -- consistency; for player mode we use party/raid tokens. UpdateHealthFast
+    -- early-returns on dfIsTestFrame so the fake token is never actually
+    -- queried via UnitExists/UnitHealth.
+    if isBossSet then
+        frame.unit = "boss" .. index
+    else
+        frame.unit = isRaidMode and ("raid" .. index) or (index == 1 and "player" or ("party" .. (index - 1)))
+    end
+
+    frame:EnableMouse(true)
+    frame:RegisterForClicks("AnyUp")
+
+    if DF.CreateFrameElements then
+        DF:CreateFrameElements(frame, isRaidMode)
+    end
+    if DF.ApplyFrameStyle then
+        DF:ApplyFrameStyle(frame)
+    end
+    if DF.ApplyAuraLayout then
+        DF:ApplyAuraLayout(frame, "BUFF")
+        DF:ApplyAuraLayout(frame, "DEBUFF")
+    end
+
+    frame:Hide()
+    return frame
+end
+
+-- Attach a drag mover to the test container. Lets the user reposition test
+-- frames live during test mode by dragging this handle — updates the
+-- TEST MODE'S profile set.position (raid profile when raid test is on).
+-- Themed with GetModeColors so raid test uses orange, party test uses blue.
+local function AttachTestMover(container, set, isRaidMode)
+    -- Mover is hidden when the set is locked (matches real pinned mover behavior)
+    local shouldShow = not set.locked
+
+    if container.testMover then
+        -- Refresh refs + theme colors in case mode flipped
+        container.testMover.dfSet = set
+        container.testMover.dfIsRaidMode = isRaidMode
+        local colors = GetModeColors(isRaidMode)
+        container.testMover.bg:SetColorTexture(unpack(colors.moverBg))
+        container.testMover.borderTex:SetColorTexture(unpack(colors.moverBorder))
+        container.testMover.inner:SetColorTexture(unpack(colors.moverBg))
+        container.testMover.text:SetTextColor(unpack(colors.moverText))
+        container.testMover.text:SetText((isRaidMode and "Raid" or "Party") .. " Test — Drag")
+        container.testMover:SetShown(shouldShow)
+        return
+    end
+
+    local colors = GetModeColors(isRaidMode)
+    local mover = CreateFrame("Frame", nil, UIParent)
+    mover:SetSize(140, 16)
+    mover:SetFrameStrata("HIGH")
+    mover:SetPoint("BOTTOM", container, "TOP", 0, 2)
+    mover.dfSet = set
+    mover.dfIsRaidMode = isRaidMode
+
+    mover.bg = mover:CreateTexture(nil, "BACKGROUND")
+    mover.bg:SetAllPoints()
+    mover.bg:SetColorTexture(unpack(colors.moverBg))
+
+    mover.borderTex = mover:CreateTexture(nil, "BORDER")
+    mover.borderTex:SetAllPoints()
+    mover.borderTex:SetColorTexture(unpack(colors.moverBorder))
+    mover.inner = mover:CreateTexture(nil, "ARTWORK")
+    mover.inner:SetPoint("TOPLEFT", 1, -1)
+    mover.inner:SetPoint("BOTTOMRIGHT", -1, 1)
+    mover.inner:SetColorTexture(unpack(colors.moverBg))
+
+    mover.text = mover:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    mover.text:SetPoint("CENTER")
+    mover.text:SetText((isRaidMode and "Raid" or "Party") .. " Test — Drag")
+    mover.text:SetTextColor(unpack(colors.moverText))
+
+    mover:EnableMouse(true)
+    mover:RegisterForDrag("LeftButton")
+
+    local startMouseX, startMouseY, startPosX, startPosY
+
+    mover:SetScript("OnDragStart", function(self)
+        local currentSet = self.dfSet
+        if not currentSet then return end
+        local dragAnchor = GetContainerAnchorPoint(currentSet)
+        local uiScale = UIParent:GetEffectiveScale()
+        startMouseX, startMouseY = GetCursorPosition()
+        startMouseX = startMouseX / uiScale
+        startMouseY = startMouseY / uiScale
+        local p = currentSet.position or { x = 0, y = 0 }
+        startPosX = p.x or 0
+        startPosY = p.y or 0
+        self:SetScript("OnUpdate", function()
+            local mx, my = GetCursorPosition()
+            local ps = UIParent:GetEffectiveScale()
+            mx = mx / ps
+            my = my / ps
+            local newX = startPosX + (mx - startMouseX)
+            local newY = startPosY + (my - startMouseY)
+            local s = container:GetScale() or 1
+            container:ClearAllPoints()
+            container:SetPoint(dragAnchor, UIParent, dragAnchor, newX / s, newY / s)
+        end)
+    end)
+
+    mover:SetScript("OnDragStop", function(self)
+        self:SetScript("OnUpdate", nil)
+        if not startMouseX then return end
+        local currentSet = self.dfSet
+        if not currentSet then return end
+        local dragAnchor = GetContainerAnchorPoint(currentSet)
+        local uiScale = UIParent:GetEffectiveScale()
+        local mx, my = GetCursorPosition()
+        mx = mx / uiScale
+        my = my / uiScale
+        local finalX = startPosX + (mx - startMouseX)
+        local finalY = startPosY + (my - startMouseY)
+        currentSet.position = { point = dragAnchor, x = finalX, y = finalY }
+        local s = container:GetScale() or 1
+        container:ClearAllPoints()
+        container:SetPoint(dragAnchor, UIParent, dragAnchor, finalX / s, finalY / s)
+    end)
+
+    mover:SetShown(shouldShow)
+    container.testMover = mover
+end
+
+-- Ensure the test container for a set exists and is positioned using the
+-- specified mode's profile config for that set (so raid test mode while solo
+-- anchors at the raid-profile's configured pinned position, not at the
+-- party-profile's position). Non-secure frame; can be created in combat.
+-- Also attaches a drag mover so the user can reposition test frames live.
+function PinnedFrames:EnsureTestContainer(setIndex, set, isRaidMode)
+    local container = self.testContainers[setIndex]
+    if not container then
+        container = CreateFrame(
+            "Frame",
+            "DandersPinnedTestContainer" .. setIndex,
+            UIParent
+        )
+        container:SetFrameStrata("MEDIUM")
+        self.testContainers[setIndex] = container
+    end
+
+    local db = isRaidMode and DF:GetRaidDB() or DF:GetDB()
+    local frameWidth = db.frameWidth or 120
+    local frameHeight = db.frameHeight or 50
+    container:SetSize(frameWidth, frameHeight)
+
+    -- Use the SAVED anchor point (pos.point) first — that's what the user
+    -- dragged the set to. Only fall back to GetContainerAnchorPoint (derived
+    -- from grow-direction settings) if the set has never been positioned.
+    -- Mismatching these puts the container off-screen: e.g. anchoring at
+    -- TOPLEFT but using (x=0, y=200) that was saved for CENTER.
+    local pos = set.position or {}
+    local anchor = pos.point or GetContainerAnchorPoint(set)
+    local scale = set.scale or 1.0
+    container:SetScale(scale)
+    container:ClearAllPoints()
+    container:SetPoint(
+        anchor, UIParent, anchor,
+        (pos.x or 0) / scale, (pos.y or 0) / scale
+    )
+    container:Show()
+
+    AttachTestMover(container, set, isRaidMode)
+
+    -- Dedicated test label (parented to UIParent for scale independence).
+    -- Anchored to the test container so it follows the test mover when
+    -- dragged. Uses the test-mode profile's set name so it always reflects
+    -- what's on screen (even in cross-mode like "raid test while in party").
+    local testLabel = container.testLabel
+    if not testLabel then
+        testLabel = UIParent:CreateFontString(
+            "DandersPinnedTest" .. setIndex .. "Label",
+            "OVERLAY",
+            "GameFontNormal"
+        )
+        testLabel:SetTextColor(0.8, 0.8, 1.0)
+        container.testLabel = testLabel
+    end
+    testLabel:ClearAllPoints()
+    testLabel:SetPoint("BOTTOM", container, "TOP", 0, 2)
+    local labelText = set.name
+    if not labelText or labelText == "" then
+        labelText = "Pinned " .. setIndex
+    end
+    testLabel:SetText(labelText)
+    testLabel:SetShown(set.showLabel)
+
+    return container
+end
+
+-- Make sure the player-mode test frame pool for a set exists and is at least
+-- `count` frames large. Frames are created lazily on demand, parented to the
+-- set's test container (which lives at the test-mode profile's position).
+function PinnedFrames:EnsurePlayerTestFramePool(setIndex, count, isRaidMode, isBossSet)
+    local container = self.testContainers[setIndex]
+    if not container then return end
+    if count < 1 then count = 1 end
+    -- Boss mode caps at 8 (WoW API limit); player mode caps at 40 (max raid)
+    local cap = isBossSet and 8 or 40
+    if count > cap then count = cap end
+
+    self.testFrames[setIndex] = self.testFrames[setIndex] or {}
+    local pool = self.testFrames[setIndex]
+
+    for i = 1, count do
+        if not pool[i] then
+            pool[i] = CreatePlayerTestFrame(setIndex, i, container, isRaidMode, isBossSet)
+        else
+            -- Reparent + re-apply state in case test mode or set frameType
+            -- flipped since last Enter.
+            pool[i]:SetParent(container)
+            local db = isRaidMode and DF:GetRaidDB() or DF:GetDB()
+            pool[i]:SetSize(db.frameWidth or 120, db.frameHeight or 50)
+            pool[i].isRaidFrame = isRaidMode
+            pool[i].isPinnedBossFrame = isBossSet or false
+        end
+    end
+end
+
+-- Position the N player-mode test frames for a set using layout math from
+-- the test-mode profile's set config.
+function PinnedFrames:ApplyPlayerTestLayout(setIndex, set, isRaidMode)
+    local container = self.testContainers[setIndex]
+    local pool = self.testFrames[setIndex]
+    if not set or not container or not pool then return end
+
+    local db = isRaidMode and DF:GetRaidDB() or DF:GetDB()
+    local frameWidth = db.frameWidth or 120
+    local frameHeight = db.frameHeight or 50
+
+    local hSpacing = set.horizontalSpacing or 2
+    local vSpacing = set.verticalSpacing or 2
+    local unitsPerRow = set.unitsPerRow or 5
+    local frameAnchor = set.frameAnchor or "START"
+    local columnAnchor = set.columnAnchor or "START"
+    local horizontal = set.growDirection == "HORIZONTAL"
+    local anchor = GetContainerAnchorPoint(set)
+
+    local n = set.testCount or 3
+    if n < 1 then n = 1 end
+    if n > 40 then n = 40 end
+
+    -- Size container to fit N frames in the set's layout (mirrors
+    -- ResizeContainer for real pinned sets). Frames anchor inside at the
+    -- computed `anchor` corner, so the container needs to be the full grid
+    -- dimension — otherwise the anchor corner sits in the wrong screen spot.
+    local rows = math.ceil(n / unitsPerRow)
+    local cols = math.min(n, unitsPerRow)
+    local containerWidth, containerHeight
+    if horizontal then
+        containerWidth = cols * frameWidth + math.max(0, cols - 1) * hSpacing
+        containerHeight = rows * frameHeight + math.max(0, rows - 1) * vSpacing
+    else
+        containerWidth = rows * frameWidth + math.max(0, rows - 1) * hSpacing
+        containerHeight = cols * frameHeight + math.max(0, cols - 1) * vSpacing
+    end
+    container:SetSize(math.max(containerWidth, 50), math.max(containerHeight, 30))
+
+    for i = 1, 40 do
+        local f = pool[i]
+        if f then
+            if i <= n then
+                f:SetSize(frameWidth, frameHeight)
+                f.isRaidFrame = isRaidMode
+
+                local slotIndex = i - 1
+                local row = math.floor(slotIndex / unitsPerRow)
+                local col = slotIndex - row * unitsPerRow
+
+                local xStep = frameWidth + hSpacing
+                local yStep = frameHeight + vSpacing
+                local xOff, yOff
+                if horizontal then
+                    if frameAnchor == "END" then xOff = -col * xStep else xOff = col * xStep end
+                    if columnAnchor == "END" then yOff = row * yStep else yOff = -row * yStep end
+                else
+                    if frameAnchor == "END" then yOff = col * yStep else yOff = -col * yStep end
+                    if columnAnchor == "END" then xOff = -row * xStep else xOff = row * xStep end
+                end
+
+                f:ClearAllPoints()
+                f:SetPoint(anchor, container, anchor, xOff, yOff)
+                f:Show()
+            else
+                f:Hide()
+            end
+        end
+    end
+end
+
+-- Hide all player-mode test frames and the test container for a set
+function PinnedFrames:HidePlayerTestFrames(setIndex)
+    local pool = self.testFrames[setIndex]
+    if pool then
+        for i = 1, #pool do
+            if pool[i] then pool[i]:Hide() end
+        end
+    end
+    local container = self.testContainers[setIndex]
+    if container then
+        if container.testMover then container.testMover:Hide() end
+        if container.testLabel then container.testLabel:Hide() end
+        container:Hide()
+    end
+end
+
+-- Called when Test Mode is toggled ON. Renders fake non-secure test frames
+-- for every enabled pinned set in the TEST MODE's profile. Works uniformly
+-- for player-mode and boss-mode sets — the only difference is the fake
+-- name source (roster names vs NPC names) and the max frame count. Real
+-- secure frames (pinned headers, boss frames) are NEVER touched — they stay
+-- at their live positions, unaffected.
+function PinnedFrames:EnterTestMode()
+    if not self.initialized then return end
+    if InCombatLockdown() then return end
+
+    self.testModeActive = true
+
+    -- Pick the active test mode for sizing/data. Raid wins if both are on.
+    local isRaidMode
+    if DF.raidTestMode then
+        isRaidMode = true
+    elseif DF.testMode then
+        isRaidMode = false
+    else
+        return
+    end
+    local actualModeMatches = (isRaidMode == IsInRaid())
+
+    for setIndex = 1, 2 do
+        local set = GetSetDBForMode(setIndex, isRaidMode)
+        if set and set.enabled then
+            local isBossSet = IsBossSet(set)
+            local n = set.testCount or 3
+            local cap = isBossSet and 8 or 40
+            if n < 1 then n = 1 end
+            if n > cap then n = cap end
+
+            -- When the test mode matches the actual group mode, hide the
+            -- real pinned header (if any) so it doesn't render alongside
+            -- fake frames. Header stays untouched in cross-mode (it's
+            -- already at a different position / already hidden).
+            if actualModeMatches and self.headers[setIndex] and not isBossSet then
+                self.headers[setIndex]:Hide()
+            end
+            -- Hide the REAL pinned container visuals (mover, bg, border,
+            -- label) when test mode matches — otherwise the user sees stale
+            -- chrome (blue box + label) anchored at the real container's
+            -- position while dragging the test mover. The test container
+            -- has its own dedicated mover + label that follow the test
+            -- frames. In cross-mode we don't touch the real visuals (they
+            -- may be in use by real frames at a different position).
+            if actualModeMatches then
+                local realContainer = self.containers[setIndex]
+                if realContainer then
+                    if realContainer.mover then
+                        realContainer.mover:Hide()
+                    end
+                    if realContainer.bg then
+                        realContainer.bg:Hide()
+                    end
+                    if realContainer.border then
+                        realContainer.border:Hide()
+                    end
+                end
+                local realLabel = self.labels[setIndex]
+                if realLabel then
+                    realLabel:Hide()
+                end
+            end
+
+            self:EnsureTestContainer(setIndex, set, isRaidMode)
+
+            self:EnsurePlayerTestFramePool(setIndex, n, isRaidMode, isBossSet)
+            self:ApplyPlayerTestLayout(setIndex, set, isRaidMode)
+
+            local pool = self.testFrames[setIndex]
+            if pool then
+                for i = 1, n do
+                    if pool[i] and DF.UpdateTestFrame then
+                        DF:UpdateTestFrame(pool[i], i, true)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Called when Test Mode is toggled OFF. Hide all pinned test frames and
+-- their containers, and show the real player-mode header again (whose
+-- visibility is driven by actual group membership). No secure frame
+-- manipulation needed — Test Mode never touched them.
+function PinnedFrames:ExitTestMode()
+    if InCombatLockdown() then return end
+    self.testModeActive = false
+
+    -- Hide all test frames + test containers (both mode profiles)
+    for setIndex = 1, 2 do
+        self:HidePlayerTestFrames(setIndex)
+    end
+
+    -- Restore real headers for player-mode sets in the current mode (we may
+    -- have hidden them when entering test mode in the same mode).
+    for setIndex = 1, 2 do
+        local set = GetSetDB(setIndex)
+        if set and not IsBossSet(set) and set.enabled and self.headers[setIndex] then
+            self.headers[setIndex]:Show()
+        end
+        -- Restore real pinned container visuals (mover, bg, border, label)
+        -- based on current set state. Mover/bg/border follow the unlocked
+        -- state; label follows showLabel. Disabled sets stay hidden.
+        if set then
+            local realContainer = self.containers[setIndex]
+            if realContainer then
+                if realContainer.mover then
+                    realContainer.mover:SetShown(set.enabled and not set.locked)
+                end
+                if realContainer.bg then
+                    realContainer.bg:SetShown(set.enabled and not set.locked)
+                end
+                if realContainer.border then
+                    realContainer.border:SetShown(set.enabled and not set.locked)
+                end
+            end
+            local realLabel = self.labels[setIndex]
+            if realLabel then
+                realLabel:SetShown(set.enabled and set.showLabel)
+            end
+        end
+    end
+
+    -- Legacy: no-op in the new design, but other code paths may still have
+    -- cleared flags on real boss frames. Defensively clear to avoid stale
+    -- dfIsTestFrame leaking from an older-session toggle.
+    C_Timer.After(0.15, function()
+        for setIndex = 1, 2 do
+            local frames = self.bossFrames[setIndex]
+            if frames then
+                for i = 1, 8 do
+                    local f = frames[i]
+                    if f and f:IsShown() and f.unit and DF.FullFrameRefresh then
+                        DF:FullFrameRefresh(f)
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Apply fake test data to all currently-shown pinned test frames. Called
+-- by the Test Mode animation ticker so health bars stay in sync with
+-- DF.TestData.animationPhase when testAnimateHealth is on.
+function PinnedFrames:UpdateTestFrames()
+    if not self.testModeActive then return end
+
+    for setIndex = 1, 2 do
+        local pool = self.testFrames[setIndex]
+        if pool then
+            for i = 1, #pool do
+                local f = pool[i]
+                if f and f:IsShown() and f.dfTestIndex then
+                    if DF.UpdateTestFrame then
+                        DF:UpdateTestFrame(f, f.dfTestIndex)
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ============================================================
+-- TIMED BOSS SPAWN TEST
+-- Schedules show/hide of individual boss slots over time, for
+-- verifying slot-allocator behaviour without being in an encounter.
+-- Does NOT populate unit data — bossN units still don't exist, so
+-- health/aura rendering stays empty. Purely a layout testbed.
+-- ============================================================
+
+-- Predefined sequence used by `/dfpinned bossspawn demo`.
+-- Format: { { bossIndex, "+"|"-", secondsFromStart }, ... }
+local BOSS_SPAWN_DEMO = {
+    { 1, "+",  0.5 },
+    { 2, "+",  2.0 },
+    { 3, "+",  4.0 },
+    { 2, "-",  6.0 },
+    { 4, "+",  7.5 },
+    { 1, "-",  9.5 },
+    { 5, "+", 11.0 },
+    { 3, "-", 13.0 },
+    { 6, "+", 14.5 },
+    { 4, "-", 16.5 },
+    { 5, "-", 18.5 },
+    { 6, "-", 20.0 },
+}
+
+-- Parse "1+:0,3+:2,1-:5,4+:7" into { { idx, sign, t }, ... }.
+-- Returns nil, errorString on parse error.
+local function ParseBossSpawnScript(script)
+    if type(script) ~= "string" or script == "" then
+        return nil, "empty script"
+    end
+    local steps = {}
+    for chunk in string.gmatch(script, "[^,]+") do
+        local chunkTrim = chunk:match("^%s*(.-)%s*$")
+        local idx, sign, t = chunkTrim:match("^(%d+)([%+%-]):(%-?%d+%.?%d*)$")
+        if not idx then
+            return nil, "bad step '" .. chunkTrim .. "' (expected form '1+:0')"
+        end
+        idx = tonumber(idx)
+        t = tonumber(t)
+        if not idx or idx < 1 or idx > 8 then
+            return nil, "boss index " .. tostring(idx) .. " out of range 1..8"
+        end
+        if not t or t < 0 then
+            return nil, "negative or invalid time in '" .. chunkTrim .. "'"
+        end
+        table.insert(steps, { idx, sign, t })
+    end
+    table.sort(steps, function(a, b) return a[3] < b[3] end)
+    return steps
+end
+
+-- Generation counter lets StopBossSpawn cancel pending timers without
+-- actually cancelling them (C_Timer doesn't expose cancellation); stale
+-- callbacks compare their captured gen to the current one and no-op.
+PinnedFrames.bossSpawnGeneration = 0
+
+-- Flip a frame's visibility state driver to a literal show/hide value.
+-- Literal values are NOT combat-restricted; only macro-conditional strings are.
+local function ForceBossFrameVisible(setIndex, bossIndex, show)
+    local frames = PinnedFrames.bossFrames[setIndex]
+    if not frames then return end
+    local f = frames[bossIndex]
+    if not f then return end
+    RegisterStateDriver(f, "visibility", show and "show" or "hide")
+end
+
+-- Restore real `[@bossN,help]show;hide` drivers on all boss-mode sets.
+local function RestoreBossFrameDrivers()
+    for setIndex = 1, 2 do
+        local set = GetSetDB(setIndex)
+        if set and set.enabled and IsBossSet(set) then
+            local frames = PinnedFrames.bossFrames[setIndex]
+            if frames then
+                for i = 1, 8 do
+                    local f = frames[i]
+                    if f then
+                        RegisterStateDriver(f, "visibility",
+                            "[@boss" .. i .. ",help]show;hide")
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- Schedule each step via C_Timer.After, keyed to a captured generation.
+function PinnedFrames:RunBossSpawnScript(steps)
+    self.bossSpawnGeneration = self.bossSpawnGeneration + 1
+    local myGen = self.bossSpawnGeneration
+
+    -- Start from a clean slate so the script's sequence is deterministic.
+    for setIndex = 1, 2 do
+        local set = GetSetDB(setIndex)
+        if set and set.enabled and IsBossSet(set) then
+            for i = 1, 8 do
+                ForceBossFrameVisible(setIndex, i, false)
+            end
+        end
+    end
+
+    local maxT = 0
+    for _, step in ipairs(steps) do
+        local bossIndex, sign, t = step[1], step[2], step[3]
+        if t > maxT then maxT = t end
+        C_Timer.After(t, function()
+            if PinnedFrames.bossSpawnGeneration ~= myGen then return end
+            for setIndex = 1, 2 do
+                local set = GetSetDB(setIndex)
+                if set and set.enabled and IsBossSet(set) then
+                    ForceBossFrameVisible(setIndex, bossIndex, sign == "+")
+                end
+            end
+        end)
+    end
+
+    -- Auto-exit 2s after the last step so drivers restore themselves.
+    C_Timer.After(maxT + 2, function()
+        if PinnedFrames.bossSpawnGeneration ~= myGen then return end
+        PinnedFrames:StopBossSpawn(true)
+    end)
+end
+
+-- Cancel any pending scripted step and restore real drivers.
+function PinnedFrames:StopBossSpawn(auto)
+    self.bossSpawnGeneration = self.bossSpawnGeneration + 1
+    RestoreBossFrameDrivers()
+    if auto then
+        print("|cFF00FFFF[DF Pinned]|r bossspawn script finished; real drivers restored")
+    else
+        print("|cFF00FFFF[DF Pinned]|r bossspawn OFF; real drivers restored")
+    end
+end
+
+-- Public entry point.
+--   nil | "" | "off"      → cancel any running script
+--   "demo"                → run the built-in 20s sequence
+--   custom script string  → parse and run
+function PinnedFrames:SetBossSpawnTest(arg)
+    if not arg or arg == "" or arg == "off" then
+        self:StopBossSpawn(false)
+        return
+    end
+
+    local anyBossSet = false
+    for setIndex = 1, 2 do
+        local set = GetSetDB(setIndex)
+        if set and set.enabled and IsBossSet(set) then
+            anyBossSet = true
+            break
+        end
+    end
+    if not anyBossSet then
+        print("|cFF00FFFF[DF Pinned]|r No enabled boss-mode sets found. Enable a pinned set and set Frame Type to 'Friendly Boss NPCs' first.")
+        return
+    end
+
+    local steps
+    if arg == "demo" then
+        steps = BOSS_SPAWN_DEMO
+    else
+        local parsed, err = ParseBossSpawnScript(arg)
+        if not parsed then
+            print("|cFF00FFFF[DF Pinned]|r bossspawn parse error: " .. err)
+            print("|cFF00FFFF[DF Pinned]|r expected: '1+:0,3+:2,1-:5' (idx <+|->:<seconds>)")
+            return
+        end
+        steps = parsed
+    end
+
+    print(format("|cFF00FFFF[DF Pinned]|r bossspawn running %d steps", #steps))
+    self:RunBossSpawnScript(steps)
+end
+
+-- Test mode for boss frames: force N boss frames visible so the secure
+-- positioning can be verified without being in an encounter. Runs out of
+-- combat only (needs to unregister/re-register state drivers). Passing
+-- nil/0/"off" exits test mode and restores the normal `[@bossN,help]` drivers.
+-- Pass visibleCount 1..8 for fixed count, or the string "dyn" for
+-- modifier-driven test (boss1 always, boss2-3 with shift, boss4-5 with
+-- ctrl, boss6-8 with alt — lets you toggle frames in/out of combat to
+-- verify the secure reposition snippet runs correctly).
+function PinnedFrames:SetBossTestMode(visibleCount)
+    if InCombatLockdown() then
+        print("|cFF00FFFF[DF Pinned]|r Boss test mode cannot toggle during combat")
+        return
+    end
+
+    local isDyn = (visibleCount == "dyn")
+    if not isDyn then
+        visibleCount = tonumber(visibleCount) or 0
+        if visibleCount < 0 then visibleCount = 0 end
+        if visibleCount > 8 then visibleCount = 8 end
+    end
+
+    self.bossTestMode = isDyn or (visibleCount > 0)
+    self.bossTestCount = visibleCount
+
+    local anyToggled = false
+    for setIndex = 1, 2 do
+        local set = GetSetDB(setIndex)
+        if set and set.enabled and IsBossSet(set) then
+            local frames = self.bossFrames[setIndex]
+            if frames then
+                if isDyn then
+                    -- Modifier-driven dynamic test: lets you add/remove frames
+                    -- with modifier keys, IN OR OUT OF COMBAT. State drivers
+                    -- (including mod: conditions) evaluate continuously; when
+                    -- they change, the handler's reposition snippet runs.
+                    --   boss1:       always visible
+                    --   boss2, boss3: visible while holding SHIFT
+                    --   boss4, boss5: visible while holding CTRL
+                    --   boss6, boss7, boss8: visible while holding ALT
+                    local conditions = {
+                        [1] = "show",
+                        [2] = "[mod:shift]show;hide",
+                        [3] = "[mod:shift]show;hide",
+                        [4] = "[mod:ctrl]show;hide",
+                        [5] = "[mod:ctrl]show;hide",
+                        [6] = "[mod:alt]show;hide",
+                        [7] = "[mod:alt]show;hide",
+                        [8] = "[mod:alt]show;hide",
+                    }
+                    for i = 1, 8 do
+                        local f = frames[i]
+                        if f then
+                            RegisterStateDriver(f, "visibility", conditions[i])
+                        end
+                    end
+                elseif visibleCount > 0 then
+                    -- Fixed-count test: literal state values, no macro eval.
+                    -- State driver strings that don't start with `[` are used
+                    -- as the literal state value.
+                    for i = 1, 8 do
+                        local f = frames[i]
+                        if i <= visibleCount then
+                            RegisterStateDriver(f, "visibility", "show")
+                        else
+                            RegisterStateDriver(f, "visibility", "hide")
+                        end
+                    end
+                else
+                    -- Test mode off: restore real conditions on the visibility driver
+                    for i = 1, 8 do
+                        local f = frames[i]
+                        if f then
+                            RegisterStateDriver(f, "visibility", "[@boss" .. i .. ",help]show;hide")
+                        end
+                    end
+                end
+                anyToggled = true
+            end
+        end
+    end
+
+    if not anyToggled then
+        print("|cFF00FFFF[DF Pinned]|r No enabled boss-mode sets found. Enable a pinned set and set Frame Type to 'Friendly Boss NPCs' first.")
+    elseif isDyn then
+        print("|cFF00FFFF[DF Pinned]|r Boss test mode ON (dynamic): boss1 always; +2,3 with SHIFT; +4,5 with CTRL; +6,7,8 with ALT. Works in combat. Run '/dfpinned bosstest off' to exit.")
+    elseif visibleCount > 0 then
+        print(format("|cFF00FFFF[DF Pinned]|r Boss test mode ON: showing %d boss frames. Run '/dfpinned bosstest off' to exit.", visibleCount))
+    else
+        print("|cFF00FFFF[DF Pinned]|r Boss test mode OFF: restored real state drivers")
+    end
+end
+
 -- Slash command for debug
 SLASH_DFPINNED1 = "/dfpinned"
 SlashCmdList["DFPINNED"] = function(msg)
-    if msg == "debug" then
-        DF.debugPinnedFrames = not DF.debugPinnedFrames
-        print("|cFF00FFFF[DF Pinned]|r Debug:", DF.debugPinnedFrames and "ON" or "OFF")
-    elseif msg == "info" then
+    if msg == "info" then
         PinnedFrames:DebugPrint()
     elseif msg == "reinit" then
         PinnedFrames:Reinitialize()
         print("|cFF00FFFF[DF Pinned]|r Reinitialized")
     elseif msg == "test" then
         PinnedFrames:Test()
+    elseif msg and msg:match("^bosstest") then
+        -- "/dfpinned bosstest 3" | "/dfpinned bosstest dyn" | "/dfpinned bosstest off"
+        local arg = msg:match("^bosstest%s+(%S+)")
+        if arg == "off" or arg == "0" or arg == nil then
+            PinnedFrames:SetBossTestMode(0)
+        elseif arg == "dyn" then
+            PinnedFrames:SetBossTestMode("dyn")
+        else
+            PinnedFrames:SetBossTestMode(tonumber(arg) or 0)
+        end
+    elseif msg and msg:match("^bossspawn") then
+        local arg = msg:match("^bossspawn%s+(.+)$")
+        PinnedFrames:SetBossSpawnTest(arg)
     else
         print("|cFF00FFFF[DF Pinned]|r Commands:")
-        print("  debug - Toggle debug output")
-        print("  info - Show detailed debug info")  
+        print("  info - Show detailed debug info (one-shot; pinned frame state dump)")
         print("  test - Add player to set 1 and enable")
+        print("  bosstest <N> - Show N boss frames to test secure positioning (1-8, 'off' to exit)")
+        print("  bosstest dyn - Modifier-driven test: boss1 always, +2,3 SHIFT, +4,5 CTRL, +6,7,8 ALT (works in combat)")
+        print("  bossspawn demo - Run a 20s simulated spawn/despawn sequence for layout testing")
+        print("  bossspawn <script> - Custom timed script, e.g. '1+:0,3+:2,1-:5'")
+        print("  bossspawn off - Cancel any running bossspawn script")
         print("  reinit - Reinitialize frames")
+        print("  (Continuous debug output is routed through the Debug Console under the 'PINNED' category — use /df console)")
     end
 end

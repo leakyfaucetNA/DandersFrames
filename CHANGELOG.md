@@ -2,15 +2,49 @@
 
 ## [4.3.3] - 2026-04-21
 
-### Internal
+### New Features
 
-* Opt-in debug instrumentation for raid group layout params investigation. Enable with `/run DandersFrames.debugLeakTest = true` to log every `PositionRaidFrameToGroupSlot` call and every rebuild of `SecureSort.raidGroupLayoutParams`, to verify whether test-mode state can leak into the live positioning path.
+* **Pinned Frames in Test Mode** — Test Mode now fills your enabled pinned sets with fake units so you can design the layout without being in a group. Boss sets show friendly-NPC test units (Fiery Treant, Charred Bramble, etc.); player-mode sets show party/raid test units. A new **Test Count** slider in the Pinned Frames settings chooses how many frames appear (1–8 boss, 1–10 player). Test frames are non-secure mock frames that look identical to live frames — your real pinned setup isn't touched. Raid test mode only shows raid-profile sets, party test mode only shows party-profile sets, and the other mode's frames are never affected.
+* **Dispel Overlay redesign** — Private Aura Dispel Overlay settings have moved to the Dispel Overlay tab under a new **Overlay Source** dropdown with four modes:
+    * **Hybrid** — DandersFrames for normal dispels, Blizzard for boss debuffs (recommended)
+    * **DandersFrames** — full customisation, does not cover boss debuffs
+    * **Blizzard** — covers both normal debuffs and boss debuffs, limited customisation
+    * **Off** — disabled
+    
+    In Hybrid mode the two overlays no longer double up; DandersFrames handles normal dispels while Blizzard picks up boss debuffs only. "Show Overlay For" (Dispellable By Me / All Dispellable) is now a single unified setting shared by both overlays.
+
+### Improvements
+
+* (Friendly Boss NPC Frames) Frames no longer collapse upward when a boss dies — surviving frames hold their position, and new bosses fill the next free slot. Slot assignments reset when combat ends
+* (Private Aura Dispel Overlay) Overlay no longer covers the frame border, text, and icons
+* (Private Aura Dispel Overlay) Added an Alpha slider to dim the overlay
+* (Dispel Overlay) Section headers now show tags indicating which dispel types each section covers under the current Overlay Source mode
+* (Dispel Overlay) Reduced CPU overhead in Blizzard and Off modes during combat
+
+### Changes
+
+* (Private Aura Dispel Overlay) Removed the "Show Dispel Icons" toggle — the top-right icons cannot be hidden separately from the overlay, so the option had no effect
+
+### Bug Fixes
+
+* (Aura Designer) Fix constant tooltip Lua error spam during raid encounters with secret auras
+* (Range) Fix error spam when range fading is active
+* (Update Notification) Fix "You aren't in a party." chat spam in NPC follower dungeons and delves
+* (Friendly Boss NPC Frames) Aura Designer indicators now apply correctly when a boss slot swaps to a new NPC mid-encounter
+* (Friendly Boss NPC Frames) Out-of-range fading now works on boss frames
+* (Friendly Boss NPC Frames) Fix health, power, name, absorb, heal prediction, and aura updates not applying reliably
+* (Friendly Boss NPC Frames) Fix Aura Designer indicators from a previous boss lingering on a slot after it's assigned to a new NPC
+* (Friendly Boss NPC Frames) Reduce race conditions where a boss frame intermittently fails to appear on spawn
+* (Friendly Boss NPC Frames) Fix health and Aura Designer indicators not updating when a boss slot silently swaps to a different NPC mid-encounter
+* (Pinned Frames) Fix stale background, border, and label from the real pinned container showing behind test frames when Test Mode matches the current group mode
+* (Pinned Frames) The set label now appears above test frames in all cases, including cross-mode previews (e.g. raid test mode while in a party)
+* (Targeted List) Cast bar now snaps to full yellow on interrupt instead of continuing to fill
 
 ## [4.3.2] - 2026-04-21
 
 ### New Features
 
-* **Friendly Boss NPC Frames** — Pinned frame sets now have a Frame Type setting. Switch a set to "Friendly Boss NPCs" to display healable friendly boss units (boss1–boss8) instead of group members. Useful for encounters where friendly adds need healing. All layout, positioning, click-casting, buffs, debuffs, and Aura Designer indicators work the same as player-mode pinned sets.
+* **Friendly Boss NPC Frames** — Pinned frame sets now have a Frame Type setting. Switch a set to "Friendly Boss NPCs" to display healable friendly boss units (boss1–boss8) instead of group members. Useful for encounters where friendly adds need healing. All layout, positioning, click-casting, buffs, debuffs, Aura Designer indicators, and out-of-range fading work the same as player-mode pinned sets. Visible frames compact to the set's anchor so there are no empty slots when only some boss units are friendly — even as bosses appear and die during combat.
 * **Update notification** — if another DandersFrames user in your group or guild is running a newer stable version, you'll see a one-time chat message on login. Can be disabled in General > Settings > Notifications.
 
 ### Improvements

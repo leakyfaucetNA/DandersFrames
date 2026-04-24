@@ -866,10 +866,10 @@ DF.PartyDefaults = {
     bossDebuffsOverlayScale = 1.05,
 
     -- Container overlay (12.0.5+ native dispel overlay for private auras)
-    bossDebuffsContainerOverlayEnabled = false,
-    bossDebuffsContainerOverlayDispelMode = 2,
+    -- Enable state + dispel-type are driven by dispelOverlaySource and
+    -- dispelOverlayDispelType (unified across both overlay systems).
     bossDebuffsContainerOverlayGradientDir = 0,
-    bossDebuffsContainerOverlayShowIcons = false,
+    bossDebuffsContainerOverlayAlpha = 1.0,
 
     -- Buff settings
     buffAlpha = 1,
@@ -1138,7 +1138,6 @@ DF.PartyDefaults = {
     dispelIconSize = 20,
     dispelMagicColor = {r = 0.2, g = 0.6, b = 1},
     dispelOnlyPlayerTypes = false,
-    dispelOverlayEnabled = true,
     dispelOverlayMode = "PLAYER_DISPELLABLE",
     dispelPoisonColor = {r = 0, g = 0.6, b = 0},
     dispelShowBleed = false,
@@ -1152,6 +1151,13 @@ DF.PartyDefaults = {
     dispelShowPoison = true,
     dispelNameText = false,
     dispellableHighlight = true,
+
+    -- Dispel overlay source selector (Phase 1 UI uses bridge to old toggles)
+    -- Values: "off" | "dandersframes" | "blizzard" | "both"
+    dispelOverlaySource = "both",
+    -- Unified "Show Overlay For" shared across all sources.
+    -- Values: 1 = Dispellable By Me, 2 = All Dispellable (Blizzard convention)
+    dispelOverlayDispelType = 2,
 
     -- External Defensive
     externalDefAnchor = "CENTER",
@@ -1930,6 +1936,7 @@ DF.PartyDefaults = {
             [1] = {
                 enabled = false,
                 frameType = "player",
+                testCount = 3,
                 name = "Pinned 1",
                 players = {},
                 growDirection = "HORIZONTAL",
@@ -1951,6 +1958,7 @@ DF.PartyDefaults = {
             [2] = {
                 enabled = false,
                 frameType = "player",
+                testCount = 3,
                 name = "Pinned 2",
                 players = {},
                 growDirection = "HORIZONTAL",
@@ -2180,10 +2188,10 @@ DF.RaidDefaults = {
     bossDebuffsOverlayScale = 1.05,
 
     -- Container overlay (12.0.5+ native dispel overlay for private auras)
-    bossDebuffsContainerOverlayEnabled = false,
-    bossDebuffsContainerOverlayDispelMode = 2,
+    -- Enable state + dispel-type are driven by dispelOverlaySource and
+    -- dispelOverlayDispelType (unified across both overlay systems).
     bossDebuffsContainerOverlayGradientDir = 0,
-    bossDebuffsContainerOverlayShowIcons = false,
+    bossDebuffsContainerOverlayAlpha = 1.0,
 
     -- Buff settings
     buffAlpha = 1,
@@ -2452,7 +2460,6 @@ DF.RaidDefaults = {
     dispelIconSize = 20,
     dispelMagicColor = {r = 0.2, g = 0.6, b = 1},
     dispelOnlyPlayerTypes = false,
-    dispelOverlayEnabled = true,
     dispelOverlayMode = "PLAYER_DISPELLABLE",
     dispelPoisonColor = {r = 0, g = 0.6, b = 0},
     dispelShowBleed = false,
@@ -2466,6 +2473,13 @@ DF.RaidDefaults = {
     dispelShowPoison = true,
     dispelNameText = false,
     dispellableHighlight = true,
+
+    -- Dispel overlay source selector (Phase 1 UI uses bridge to old toggles)
+    -- Values: "off" | "dandersframes" | "blizzard" | "both"
+    dispelOverlaySource = "both",
+    -- Unified "Show Overlay For" shared across all sources.
+    -- Values: 1 = Dispellable By Me, 2 = All Dispellable (Blizzard convention)
+    dispelOverlayDispelType = 2,
 
     -- External Defensive
     externalDefAnchor = "CENTER",
@@ -3163,6 +3177,7 @@ DF.RaidDefaults = {
             [1] = {
                 enabled = false,
                 frameType = "player",
+                testCount = 3,
                 name = "Pinned 1",
                 players = {},
                 growDirection = "HORIZONTAL",
@@ -3184,6 +3199,7 @@ DF.RaidDefaults = {
             [2] = {
                 enabled = false,
                 frameType = "player",
+                testCount = 3,
                 name = "Pinned 2",
                 players = {},
                 growDirection = "HORIZONTAL",

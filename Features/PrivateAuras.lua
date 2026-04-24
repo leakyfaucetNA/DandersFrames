@@ -422,23 +422,36 @@ end
 
 SetupContainerOverlay = function(frame, unit, db)
     if not IS_CONTAINER_SUPPORTED then return end
-    if not db.bossDebuffsContainerOverlayEnabled then return end
+    -- Only run when the source selector includes Blizzard ("blizzard" or "both").
+    local src = db.dispelOverlaySource or "both"
+    if src ~= "blizzard" and src ~= "both" then return end
 
-    -- Create or reuse the wrapper frame
-    -- Parent to contentOverlay so the overlay renders above the health bar
-    local parent = frame.contentOverlay or frame
+    -- Parent to the unit frame and match dfDispelOverlay's level (frame+6) so the
+    -- native dispel overlay renders at the same depth as DF's own dispel overlay
+    -- instead of above the frame border / text / icons.
     local wrapper = frame.containerOverlayFrame
     if not wrapper then
-        wrapper = CreateFrame("Frame", nil, parent)
+        wrapper = CreateFrame("Frame", nil, frame)
         wrapper:EnableMouse(false)
         if wrapper.SetMouseClickEnabled then wrapper:SetMouseClickEnabled(false) end
         frame.containerOverlayFrame = wrapper
     end
 
-    wrapper:SetParent(parent)
+    wrapper:SetParent(frame)
     wrapper:ClearAllPoints()
-    wrapper:SetAllPoints(parent)
+    wrapper:SetAllPoints(frame)
+    wrapper:SetFrameLevel(frame:GetFrameLevel() + 6)
+    -- Always keep the wrapper Shown so Blizzard's container eventFrame
+    -- (a descendant, see Blizzard_PrivateAurasUI.lua:699-707) stays
+    -- registered for UNIT_AURA. Visibility is controlled via alpha so
+    -- the container's internal self.dispels stays in sync when we gate
+    -- the overlay on dfDispelOverlay:IsShown().
     wrapper:Show()
+    -- Apply the user-chosen alpha directly. In Blizzard mode the wrapper
+    -- keeps this value permanently; in Hybrid mode the
+    -- UpdateContainerOverlayVisibility call below may immediately override
+    -- to 0 if DF's own overlay is currently shown.
+    wrapper:SetAlpha(db.bossDebuffsContainerOverlayAlpha or 1.0)
 
     -- Determine group type from unit token
     local groupType
@@ -455,9 +468,15 @@ SetupContainerOverlay = function(frame, unit, db)
     wrapper:SetAttribute("max-dispel-debuffs", 1)
     wrapper:SetAttribute("ignore-buffs", true)
     wrapper:SetAttribute("ignore-debuffs", true)
+    wrapper:SetAttribute("ignore-dispel-debuffs", true)
     wrapper:SetAttribute("show-dispel-indicator-overlay", true)
-    wrapper:SetAttribute("suppress-dispel-border-icons", not db.bossDebuffsContainerOverlayShowIcons)
-    wrapper:SetAttribute("dispel-indicator-option", db.bossDebuffsContainerOverlayDispelMode)
+    wrapper:SetAttribute("suppress-dispel-border-icons", true)
+    -- dispel-indicator-option drives both the TOPRIGHT dispel icons and the
+    -- gradient: Blizzard only calls SetDispelOverlayAura from inside
+    -- SetDispelDebuff, which always shows the icon first, so there's no way to
+    -- hide the icons without also hiding the gradient.
+    -- 1 = dispellable by me. 2 = all dispellable.
+    wrapper:SetAttribute("dispel-indicator-option", db.dispelOverlayDispelType or 2)
     wrapper:SetAttribute("aura-organization-type", db.bossDebuffsContainerOverlayGradientDir)
     wrapper:SetAttribute("group-type", groupType)
     wrapper:SetAttribute("power-bar-used-height", 0)
@@ -486,6 +505,92 @@ SetupContainerOverlay = function(frame, unit, db)
             DF:DebugError("Container overlay registration FAILED for " .. unit .. ": " .. tostring(anchorID))
         end
     end
+
+    -- Initial visibility sync: if DF's own overlay is already shown for a
+    -- normal dispellable debuff, keep the Blizzard wrapper hidden so they
+    -- don't both render.
+    DF:UpdateContainerOverlayVisibility(frame)
+end
+
+-- ============================================================
+-- CONTAINER OVERLAY VISIBILITY GATE
+-- Blizzard's container overlay (CompactUnitFrameDispelOverlayTemplate)
+-- fires for ANY dispellable debuff, not just private auras — the scan
+-- at PrivateAuraAnchorContainerMixin:ParseAllAuras calls AuraUtil.ForEachAura
+-- for all Harmful/Helpful auras, then feeds them through CheckAddDispel.
+-- There's no attribute to scope it to private-only.
+--
+-- Since DF already renders its own dispel overlay (dfDispelOverlay) for
+-- normal dispellable debuffs via its own logic, showing Blizzard's on top
+-- of that would double up visually.
+--
+-- Strategy: gate the Blizzard wrapper on DF's own overlay's shown state.
+--   * dfDispelOverlay:IsShown() == true  → wrapper alpha = 0 (DF wins)
+--   * dfDispelOverlay:IsShown() == false → wrapper alpha = user's chosen
+--     alpha (Blizzard catches private auras DF can't see)
+--
+-- We use alpha (not Show/Hide) so the container's internal eventFrame
+-- (a descendant of the wrapper) stays registered for UNIT_AURA —
+-- Blizzard_PrivateAurasUI.lua:699-707 unregisters on OnHide. Otherwise
+-- the container goes deaf while hidden and self.dispels / DispelOverlay
+-- state stays stale until the next unrelated UNIT_AURA wakes it up,
+-- which produced a visible "stale overlay flashes after debuff drops"
+-- bug.
+--
+-- dfDispelOverlay:IsShown() is secret-safe: DF's show/hide uses plain
+-- Show()/Hide() calls (never SetShownFromBoolean with a secret bool), so
+-- the shown state is a regular boolean.
+-- ============================================================
+
+-- Hide is immediate (DF taking over — no race concern, Blizzard's
+-- overlay is behind alpha=0 either way).
+--
+-- Reveal is deferred one frame via C_Timer.After(0) to avoid a
+-- one-frame stale-flash of Blizzard's DispelOverlay: DF updates
+-- synchronously inside UNIT_AURA, but Blizzard's container uses
+-- MarkDirty → C_Timer.After(0, Clean) to defer its Update (and the
+-- subsequent DispelOverlay:Hide()) by one frame. If we set alpha
+-- synchronously on reveal, the stale overlay is briefly visible
+-- through our userAlpha before Blizzard hides it on the next tick.
+-- Deferring the reveal puts both transitions on the same next-frame
+-- tick so they render together, flicker-free. The re-check inside
+-- the timer handles rapid DF show→hide→show churn by confirming
+-- dfOwnShown is still false before revealing.
+function DF:UpdateContainerOverlayVisibility(frame)
+    if not frame then return end
+    local wrapper = frame.containerOverlayFrame
+    if not wrapper then return end
+    local db = DF:GetFrameDB(frame)
+    local src = (db and db.dispelOverlaySource) or "both"
+
+    -- Only the Hybrid ("both") source needs alpha-gating — that's the single
+    -- mode where DF's own overlay and the Blizzard wrapper both exist and
+    -- need to be alternated. In other modes the wrapper's alpha is owned
+    -- by SetupContainerOverlay / UpdateContainerOverlaySettings directly:
+    --   * off / dandersframes → wrapper doesn't exist (teardown elsewhere)
+    --   * blizzard → wrapper stays at userAlpha permanently
+    -- Skipping the rest of this function on every UNIT_AURA in Blizzard
+    -- mode avoids a redundant GetFrameDB + SetAlpha per tick.
+    if src ~= "both" then return end
+
+    -- Hybrid ("both") gate: suppress the Blizzard wrapper while DF's own
+    -- overlay is shown, reveal it otherwise (so Blizzard can still fire for
+    -- private auras DF can't see).
+    local dfOwnShown = frame.dfDispelOverlay and frame.dfDispelOverlay:IsShown()
+    if dfOwnShown then
+        wrapper:SetAlpha(0)
+        return
+    end
+
+    C_Timer.After(0, function()
+        if not frame or not frame.containerOverlayFrame then return end
+        -- Re-read in case DF took over again during the one-frame wait.
+        local currentDfShown = frame.dfDispelOverlay and frame.dfDispelOverlay:IsShown()
+        if currentDfShown then return end
+        local db2 = DF:GetFrameDB(frame)
+        local alpha = (db2 and db2.bossDebuffsContainerOverlayAlpha) or 1.0
+        frame.containerOverlayFrame:SetAlpha(alpha)
+    end)
 end
 
 function DF:UpdateContainerOverlaySettings(frame)
@@ -498,8 +603,10 @@ function DF:UpdateContainerOverlaySettings(frame)
     local wrapper = frame.containerOverlayFrame
     if not wrapper then return end
 
-    -- If overlay was just disabled, do a full teardown/setup
-    if not db.bossDebuffsContainerOverlayEnabled then
+    -- If the source selector excludes Blizzard, do a full teardown.
+    local src = db.dispelOverlaySource or "both"
+    local blizOn = (src == "blizzard") or (src == "both")
+    if not blizOn then
         local anchorID = containerOverlayAnchors[frame]
         if anchorID then
             pcall(function()
@@ -521,9 +628,15 @@ function DF:UpdateContainerOverlaySettings(frame)
     end
 
     -- Update attributes for live changes
-    wrapper:SetAttribute("suppress-dispel-border-icons", not db.bossDebuffsContainerOverlayShowIcons)
-    wrapper:SetAttribute("dispel-indicator-option", db.bossDebuffsContainerOverlayDispelMode)
+    wrapper:SetAttribute("dispel-indicator-option", db.dispelOverlayDispelType or 2)
     wrapper:SetAttribute("aura-organization-type", db.bossDebuffsContainerOverlayGradientDir)
+
+    -- Push the user alpha directly so Blizzard-mode slider changes take
+    -- effect (UpdateContainerOverlayVisibility is Hybrid-only now and would
+    -- no-op otherwise). In Hybrid mode the gate call immediately overrides
+    -- to 0 if DF's overlay is visible.
+    wrapper:SetAlpha(db.bossDebuffsContainerOverlayAlpha or 1.0)
+    DF:UpdateContainerOverlayVisibility(frame)
 
     -- Signal the container to re-read settings
     wrapper:SetAttribute("update-settings", true)
@@ -596,6 +709,24 @@ end
 -- LIGHTWEIGHT REANCHOR (unit token changed, frames stay)
 -- ============================================================
 
+-- POTENTIAL FUTURE IMPROVEMENT:
+-- Grid2's IndicatorPrivateAurasDispells re-applies "group-type" and
+-- "update-settings" on the wrapper every time the unit token changes,
+-- so Blizzard's PrivateAuraAnchorContainer re-reads its settings on each
+-- unit re-anchor. We currently set "group-type" once in SetupContainerOverlay
+-- based on the initial unit token.
+--
+-- In practice this doesn't matter today because:
+--   * DF keeps party and raid frames in separate secure headers, so a wrapper
+--     created for a party unit never gets re-assigned to a raid unit token.
+--   * Blizzard's IsPartyFrame() returns true for both group-type 4 (Party)
+--     and 5 (Raid), so the value only discriminates party-like vs other.
+--     No aura currently uses hideOnPartyFrames to split 4 vs 5.
+--
+-- If either of those changes, or if we add more dynamic attributes later,
+-- mirroring Grid2's approach (SetAttribute on group-type + update-settings
+-- inside ReanchorPrivateAuras and/or SetupContainerOverlay's reanchor path)
+-- would bulletproof us.
 function DF:ReanchorPrivateAuras(frame)
     if not frame or not frame.unit then return end
     if InCombatLockdown() then

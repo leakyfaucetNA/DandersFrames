@@ -8367,18 +8367,35 @@ IteratePinnedFrames = function(callback)
     end
 end
 
--- Helper to find pinned frame for a specific unit
+-- Helper to find pinned frame for a specific unit (player-mode or boss-mode set)
 local function FindPinnedFrameForUnit(unit)
-    if not DF.PinnedFrames or not DF.PinnedFrames.initialized or not DF.PinnedFrames.headers then
+    if not DF.PinnedFrames or not DF.PinnedFrames.initialized then
         return nil
     end
-    for setIndex = 1, 2 do
-        local header = DF.PinnedFrames.headers[setIndex]
-        if header and header:IsShown() then
-            for i = 1, 40 do
-                local child = header:GetAttribute("child" .. i)
-                if child and child:IsVisible() and child.unit == unit then
-                    return child
+    -- Player-mode pinned sets: iterate header children
+    if DF.PinnedFrames.headers then
+        for setIndex = 1, 2 do
+            local header = DF.PinnedFrames.headers[setIndex]
+            if header and header:IsShown() then
+                for i = 1, 40 do
+                    local child = header:GetAttribute("child" .. i)
+                    if child and child:IsVisible() and child.unit == unit then
+                        return child
+                    end
+                end
+            end
+        end
+    end
+    -- Boss-mode pinned sets: iterate standalone boss frames
+    if DF.PinnedFrames.bossFrames then
+        for setIndex = 1, 2 do
+            local frames = DF.PinnedFrames.bossFrames[setIndex]
+            if frames then
+                for i = 1, 8 do
+                    local f = frames[i]
+                    if f and f:IsVisible() and f.unit == unit then
+                        return f
+                    end
                 end
             end
         end

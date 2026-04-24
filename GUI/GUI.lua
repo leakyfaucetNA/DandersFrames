@@ -27,6 +27,7 @@ GUI.SelectedMode = "party"
 GUI.NewTabs = {
     ["indicators_targetedlist"] = true,
     ["general_pinnedframes"] = true,
+    ["auras_dispel"] = true,
 }
 
 -- Registry of section headers (inside a tab) that should show a "New" badge
@@ -36,6 +37,7 @@ GUI.NewTabs = {
 -- when the user leaves the owning tab (persisted via seenSections).
 GUI.NewSections = {
     ["general_pinnedframes.frameType"] = true,
+    ["auras_dispel.overlaySource"] = true,
 }
 
 -- Live-tracked badges pending a "seen" mark, keyed by tabName → { key = badge }.
@@ -46,8 +48,12 @@ GUI.pendingSectionBadges = {}
 -- badge FontString, or nil if the section isn't registered in NewSections or
 -- has already been marked seen. The badge clears (and is persisted as seen)
 -- the next time the user navigates away from `tabName`.
-function GUI:AddSectionNewBadge(header, tabName, sectionId)
-    if not header or not header.text or not tabName or not sectionId then return end
+function GUI:AddSectionNewBadge(widget, tabName, sectionId)
+    -- Anchor to whichever label FontString the widget exposes:
+    --   * CreateHeader containers use `.text`
+    --   * CreateDropdown containers use `.label`
+    local anchor = widget and (widget.text or widget.label)
+    if not anchor or not tabName or not sectionId then return end
     local key = tabName .. "." .. sectionId
     if not GUI.NewSections[key] then return end
 
@@ -55,8 +61,8 @@ function GUI:AddSectionNewBadge(header, tabName, sectionId)
                  and DandersFramesDB_v2.seenSections[key]
     if seen then return end
 
-    local badge = header:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
-    badge:SetPoint("LEFT", header.text, "RIGHT", 6, 0)
+    local badge = widget:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
+    badge:SetPoint("LEFT", anchor, "RIGHT", 6, 0)
     badge:SetText(L["New"])
     badge:SetTextColor(1, 0.82, 0)
 
@@ -227,11 +233,21 @@ function GUI:CreateHeader(parent, text)
     return container
 end
 
--- Collapsible section for grouping related settings
+-- Collapsible section for grouping related settings.
+-- Collapsed state is persisted in DandersFramesDB_v2.collapsedGroups keyed by
+-- `text` (shared store with CreateSettingsGroup's collapsible header), so the
+-- user's fold preference survives reloads.
 function GUI:CreateCollapsibleSection(parent, text, defaultExpanded, width)
     local section = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     section:SetSize(width or 500, 28)  -- Header height
-    section.expanded = defaultExpanded ~= false  -- Default to expanded
+    -- Resolve initial expanded state: SavedVariables override the default.
+    local savedStates = GUI:GetCollapsedGroups()
+    if text and savedStates[text] ~= nil then
+        section.expanded = not savedStates[text]
+    else
+        section.expanded = defaultExpanded ~= false
+    end
+    section.sectionTitleText = text
     section.sectionChildren = {}
     section.paddingAfter = 8  -- Padding space after header before first child
     
@@ -273,7 +289,24 @@ function GUI:CreateCollapsibleSection(parent, text, defaultExpanded, width)
     end
     if not parent.ThemeListeners then parent.ThemeListeners = {} end
     table.insert(parent.ThemeListeners, section.title)
-    
+
+    -- Optional inline tag — small yellow text placed after the title to
+    -- stand out as a status summary (e.g. "[Normal Dispels]"). Call
+    -- section:SetTag(text) at any time; pass nil or empty string to clear.
+    section.tag = section:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
+    section.tag:SetPoint("LEFT", section.title, "RIGHT", 8, 0)
+    section.tag:SetTextColor(1, 0.82, 0, 1)  -- WoW standard gold/yellow
+    section.tag:SetText("")
+    section.SetTag = function(self, text)
+        if text and text ~= "" then
+            self.tag:SetText(text)
+            self.tag:Show()
+        else
+            self.tag:SetText("")
+            self.tag:Hide()
+        end
+    end
+
     -- SEARCH: Track current section
     if DF.Search then
         DF.Search:SetCurrentSection(text)
@@ -287,7 +320,12 @@ function GUI:CreateCollapsibleSection(parent, text, defaultExpanded, width)
         else
             self.arrow:SetTexture("Interface\\AddOns\\DandersFrames\\Media\\Icons\\chevron_right")
         end
-        
+        -- Persist collapsed state to SavedVariables (only store true, remove when expanded)
+        if self.sectionTitleText then
+            local saved = GUI:GetCollapsedGroups()
+            saved[self.sectionTitleText] = (not self.expanded) or nil
+        end
+
         -- Trigger layout refresh (RefreshStates handles show/hide based on expanded state)
         if parent.RefreshStates then
             parent:RefreshStates()
@@ -615,6 +653,225 @@ function GUI:CreateLabel(parent, text, width, color)
     
     frame.SetText = function(self, newText) lbl:SetText(newText) end
     return frame
+end
+
+-- Themed info callout: neutral dark box with a theme-color border and a label
+-- composed of a bold title prefix + body text. Used for settings explanations
+-- that benefit from visual prominence without the red "warning" styling.
+-- SetContent(title, body) updates both parts; SetText(text) remains available
+-- for plain single-string use.
+function GUI:CreateInfoCallout(parent, width, height)
+    local frame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    frame:SetSize(width or 560, height or 60)
+    frame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Buttons\\WHITE8x8",
+        edgeSize = 1,
+    })
+
+    local applyTheme = function()
+        local c = GetThemeColor()
+        -- Neutral element background with the theme colour only on the border
+        -- and (via SetContent below) on the bolded title prefix. Keeps the box
+        -- from looking like a big coloured panel.
+        frame:SetBackdropColor(C_ELEMENT.r, C_ELEMENT.g, C_ELEMENT.b, 0.75)
+        frame:SetBackdropBorderColor(c.r, c.g, c.b, 0.7)
+    end
+    applyTheme()
+
+    local lbl = frame:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
+    lbl:SetPoint("TOPLEFT", 10, -10)
+    lbl:SetPoint("BOTTOMRIGHT", -10, 10)
+    lbl:SetJustifyH("LEFT")
+    lbl:SetJustifyV("TOP")
+    lbl:SetWordWrap(true)
+    lbl:SetNonSpaceWrap(true)
+    lbl:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
+
+    local currentTitle, currentBody = nil, ""
+    local function render()
+        if currentTitle and currentTitle ~= "" then
+            local c = GetThemeColor()
+            local hex = string.format("ff%02x%02x%02x",
+                math.floor(c.r * 255), math.floor(c.g * 255), math.floor(c.b * 255))
+            lbl:SetText("|c" .. hex .. currentTitle .. ":|r " .. (currentBody or ""))
+        else
+            lbl:SetText(currentBody or "")
+        end
+    end
+
+    frame.SetContent = function(self, title, body)
+        currentTitle, currentBody = title, body
+        render()
+    end
+    frame.SetText = function(self, text)
+        currentTitle, currentBody = nil, text
+        render()
+    end
+
+    frame.UpdateTheme = function()
+        applyTheme()
+        render()
+    end
+    if not parent.ThemeListeners then parent.ThemeListeners = {} end
+    table.insert(parent.ThemeListeners, frame)
+
+    return frame
+end
+
+-- Segmented button group: a row of mutually-exclusive buttons, one selected at
+-- a time. Each option shows a primary label and an optional subtitle on a
+-- second line. Selected button gets a themed border + tinted fill; unselected
+-- buttons use the standard element backdrop.
+--
+--   options: ordered array of { value=, label=, subtitle= }
+--   dbTable/dbKey: reads/writes the selected value
+--   callback: called after a selection change
+--   totalWidth: total container width (buttons divide it evenly with small gaps)
+function GUI:CreateSegmentedButtonGroup(parent, options, dbTable, dbKey, callback, totalWidth)
+    local container = CreateFrame("Frame", nil, parent)
+    totalWidth = totalWidth or 560
+    local btnHeight = 38  -- compact modern height: label + subtitle fit snugly
+    local gap = 4
+    local minBtnWidth = 110  -- below this, buttons wrap to next row
+    container:SetSize(totalWidth, btnHeight)
+
+    local n = #options
+
+    local buttons = {}
+    container.buttons = buttons
+
+    -- Reposition buttons to fill the container's current width. Wraps to
+    -- additional rows when per-button width would drop below minBtnWidth.
+    -- Called on creation and on OnSizeChanged so buttons reflow when the
+    -- page stretches or shrinks the container.
+    local function Relayout()
+        -- Re-entry guard: OnSizeChanged can fire again when we SetHeight
+        -- below, and we might also be called during a deferred RefreshStates.
+        -- Without this guard the widget rebuild chain loops infinitely and
+        -- drops the framerate to single digits.
+        if container._relayouting then return end
+        container._relayouting = true
+
+        local w = container:GetWidth() or totalWidth
+        if w <= 0 then w = totalWidth end
+
+        local perRow = math.max(1, math.min(n, math.floor((w + gap) / (minBtnWidth + gap))))
+        local rows = math.ceil(n / perRow)
+        local bw = math.floor((w - gap * (perRow - 1)) / perRow)
+
+        for i, btn in ipairs(buttons) do
+            local rowIdx = math.ceil(i / perRow) - 1
+            local colIdx = (i - 1) % perRow
+            btn:SetWidth(bw)
+            btn:ClearAllPoints()
+            btn:SetPoint("TOPLEFT", colIdx * (bw + gap), -(rowIdx * (btnHeight + gap)))
+        end
+
+        local newHeight = rows * btnHeight + (rows - 1) * gap
+        if math.abs((container:GetHeight() or 0) - newHeight) > 0.5 then
+            container:SetHeight(newHeight)
+        end
+
+        -- If the row count changed the required layout space, bump
+        -- layoutHeight so the page reserves the right amount on the next
+        -- layout pass, and defer a layout-only refresh (NOT page:Refresh()
+        -- which would rebuild all widgets and re-enter this path forever).
+        local desiredLayoutH = newHeight + 4
+        if container.layoutHeight ~= desiredLayoutH then
+            container.layoutHeight = desiredLayoutH
+            if not container._relayoutPending then
+                container._relayoutPending = true
+                C_Timer.After(0, function()
+                    container._relayoutPending = false
+                    if parent and parent.RefreshStates then
+                        parent:RefreshStates()
+                    end
+                end)
+            end
+        end
+
+        container._relayouting = false
+    end
+    container:SetScript("OnSizeChanged", function() Relayout() end)
+
+    local function Refresh()
+        local currentVal = dbTable and dbTable[dbKey]
+        local theme = GetThemeColor()
+        for _, btn in ipairs(buttons) do
+            local selected = (btn.value == currentVal)
+            btn.selected = selected
+            if selected then
+                -- Border-only selection: same backdrop as unselected, themed
+                -- border, themed label. Subtle but unambiguous.
+                btn:SetBackdropColor(C_ELEMENT.r, C_ELEMENT.g, C_ELEMENT.b, 1)
+                btn:SetBackdropBorderColor(theme.r, theme.g, theme.b, 1)
+                if btn.Label then btn.Label:SetTextColor(theme.r, theme.g, theme.b, 1) end
+                if btn.Subtitle then btn.Subtitle:SetTextColor(theme.r * 0.85, theme.g * 0.85, theme.b * 0.95, 1) end
+            else
+                btn:SetBackdropColor(C_ELEMENT.r, C_ELEMENT.g, C_ELEMENT.b, 1)
+                btn:SetBackdropBorderColor(C_BORDER.r, C_BORDER.g, C_BORDER.b, 0.6)
+                if btn.Label then btn.Label:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b, 1) end
+                if btn.Subtitle then btn.Subtitle:SetTextColor(C_TEXT_DIM.r, C_TEXT_DIM.g, C_TEXT_DIM.b, 1) end
+            end
+        end
+    end
+    container.Refresh = Refresh
+    -- refreshContent hook used by the page layout so external changes to the
+    -- db value (e.g. profile switches) re-sync the selected button.
+    container.refreshContent = function(self) Refresh() end
+
+    for i, opt in ipairs(options) do
+        local btn = CreateFrame("Button", nil, container, "BackdropTemplate")
+        btn:SetHeight(btnHeight)
+        -- Width and position set by Relayout() below (called at end of setup
+        -- and on every OnSizeChanged).
+        CreateElementBackdrop(btn)
+
+        btn.value = opt.value
+
+        btn.Label = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
+        btn.Label:SetPoint("TOP", 0, -5)
+        btn.Label:SetText(opt.label or "")
+
+        if opt.subtitle and opt.subtitle ~= "" then
+            btn.Subtitle = btn:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
+            btn.Subtitle:SetPoint("BOTTOM", 0, 5)
+            btn.Subtitle:SetText(opt.subtitle)
+            -- Nudge subtitle down by ~1 pt for a clearer visual hierarchy.
+            local fPath, fSize, fFlags = btn.Subtitle:GetFont()
+            if fPath and fSize and fSize > 9 then
+                btn.Subtitle:SetFont(fPath, fSize - 1, fFlags or "")
+            end
+        end
+
+        btn:SetScript("OnEnter", function(self)
+            if not self.selected then
+                self:SetBackdropColor(C_HOVER.r, C_HOVER.g, C_HOVER.b, 1)
+            end
+        end)
+        btn:SetScript("OnLeave", function(self)
+            Refresh()
+        end)
+        btn:SetScript("OnClick", function(self)
+            if dbTable[dbKey] == self.value then return end
+            dbTable[dbKey] = self.value
+            PlaySound(SOUNDKIT.IG_MAINMENU_OPTION_CHECKBOX_ON)
+            Refresh()
+            if callback then callback() end
+        end)
+
+        buttons[i] = btn
+    end
+
+    Relayout()
+    Refresh()
+
+    container.UpdateTheme = function() Refresh() end
+    if not parent.ThemeListeners then parent.ThemeListeners = {} end
+    table.insert(parent.ThemeListeners, container)
+
+    return container
 end
 
 function GUI:CreateWarningBox(parent, text, width, height)
@@ -2292,12 +2549,14 @@ end
 function GUI:CreateDropdown(parent, label, options, dbTable, dbKey, callback)
     local container = CreateFrame("Frame", nil, parent)
     container:SetSize(260, 50)
-    
+
     -- Label
     local lbl = container:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
     lbl:SetPoint("TOPLEFT", 0, 0)
     lbl:SetText(label)
     lbl:SetTextColor(C_TEXT.r, C_TEXT.g, C_TEXT.b)
+    -- Expose label so helpers like AddSectionNewBadge can anchor a badge to it.
+    container.label = lbl
     
     -- Add override indicators if dbKey is provided (for auto profiles)
     if dbKey and type(dbKey) == "string" then

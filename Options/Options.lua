@@ -1885,6 +1885,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                 if set.players == nil then set.players = {} end
                 if set.manualPlayers == nil then set.manualPlayers = {} end
                 if set.frameType == nil then set.frameType = "player" end
+                if set.testCount == nil then set.testCount = 3 end
             end
         end
         
@@ -2482,12 +2483,22 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             return GUI.SelectedMode == actualMode
         end
 
+        -- Refresh Test Mode frames if active — enable/lock toggles affect
+        -- mover visibility and whether test frames should render at all.
+        local function RefreshTestModeIfActive()
+            if DF.PinnedFrames.IsTestModeActive and DF.PinnedFrames:IsTestModeActive() then
+                DF.PinnedFrames:ExitTestMode()
+                DF.PinnedFrames:EnterTestMode()
+            end
+        end
+
         settingsGroup:AddWidget(CreateRefreshableCheckbox(self.child, L["Enable"], "enabled", function()
             if not DF.PinnedFrames then return end
             if IsEditingActiveMode() then
                 DF.PinnedFrames:SetEnabled(activeHighlightTab, GetCurrentSet().enabled)
             end
             DF.PinnedFrames:UpdatePreviewSet(activeHighlightTab)
+            RefreshTestModeIfActive()
         end), 28)
         settingsGroup:AddWidget(CreateRefreshableCheckbox(self.child, L["Lock Position"], "locked", function()
             if not DF.PinnedFrames then return end
@@ -2495,6 +2506,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                 DF.PinnedFrames:SetLocked(activeHighlightTab, GetCurrentSet().locked)
             end
             DF.PinnedFrames:UpdatePreviewSet(activeHighlightTab)
+            RefreshTestModeIfActive()
         end), 28)
         settingsGroup:AddWidget(CreateRefreshableCheckbox(self.child, L["Show Label"], "showLabel", function()
             if not DF.PinnedFrames then return end
@@ -2502,6 +2514,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                 DF.PinnedFrames:SetShowLabel(activeHighlightTab, GetCurrentSet().showLabel)
             end
             DF.PinnedFrames:UpdatePreviewSet(activeHighlightTab)
+            RefreshTestModeIfActive()
         end), 28)
 
         -- Reset Position button
@@ -2599,6 +2612,23 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
 
         frameTypeGroup:AddWidget(
             CreateRefreshableDropdown(self.child, L["Frame Type"], frameTypeOptions, "frameType", OnFrameTypeChanged),
+            55
+        )
+
+        -- Test Count slider: how many test frames show when Test Mode is
+        -- active. Boss mode: 1–8 (hard WoW limit). Player mode: 1–10
+        -- (covers typical pinned set sizes; range kept modest since pinned
+        -- sets rarely need more than that for layout verification).
+        local function OnTestCountChanged()
+            if not DF.PinnedFrames then return end
+            if DF.PinnedFrames.IsTestModeActive and DF.PinnedFrames:IsTestModeActive() then
+                DF.PinnedFrames:ExitTestMode()
+                DF.PinnedFrames:EnterTestMode()
+            end
+        end
+        local testMax = IsCurrentBossMode() and 8 or 10
+        frameTypeGroup:AddWidget(
+            CreateRefreshableSlider(self.child, L["Test Count"], 1, testMax, 1, "testCount", OnTestCountChanged),
             55
         )
 
@@ -5272,56 +5302,10 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         Add(overlayGroup, nil, 2)
         end -- not IS_CONTAINER_SUPPORTED
 
-        if IS_CONTAINER_SUPPORTED then
-        -- ===== CONTAINER DISPEL OVERLAY GROUP (Column 2, 12.0.5+ only) =====
-        local containerGroup = GUI:CreateSettingsGroup(self.child, 280)
-        containerGroup:AddWidget(GUI:CreateHeader(self.child, L["Private Aura Dispel Overlay"]), 40)
-
-        -- Warning notice
-        local noticeText = containerGroup:AddWidget(GUI:CreateLabel(self.child, "|cFFFF4444Note:|r " .. L["This overlay is rendered by Blizzard and has limited customisation. It is not the same as the Dispel Overlay tab."], 260), 50)
-
-        -- Enable checkbox
-        local containerEnable = containerGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Enable Dispel Overlay"], db, "bossDebuffsContainerOverlayEnabled", function()
-            if DF.PreviewPrivateAuraAnchors then DF:PreviewPrivateAuraAnchors() end
-            GUI:RefreshCurrentPage()
-        end), 30)
-
-        local function HideContainerOverlayOptions(d)
-            return not d.bossDebuffsEnabled or not d.bossDebuffsContainerOverlayEnabled
-        end
-
-        -- Show Overlay For dropdown
-        local dispelModeOptions = {
-            [1] = L["Dispellable By Me"],
-            [2] = L["All Dispellable"],
-        }
-        local containerDispelMode = containerGroup:AddWidget(GUI:CreateDropdown(self.child, L["Show Overlay For"], dispelModeOptions, db, "bossDebuffsContainerOverlayDispelMode", function()
-            if DF.PreviewPrivateAuraAnchors then DF:PreviewPrivateAuraAnchors() end
-        end), 55)
-        containerDispelMode.hideOn = HideContainerOverlayOptions
-
-        -- Gradient Direction dropdown
-        local gradientDirOptions = {
-            [0] = L["Top Edge"],
-            [1] = L["Bottom Edge"],
-            [2] = L["Left Edge"],
-        }
-        local containerGradientDir = containerGroup:AddWidget(GUI:CreateDropdown(self.child, L["Gradient Direction"], gradientDirOptions, db, "bossDebuffsContainerOverlayGradientDir", function()
-            if DF.PreviewPrivateAuraAnchors then DF:PreviewPrivateAuraAnchors() end
-        end), 55)
-        containerGradientDir.hideOn = HideContainerOverlayOptions
-        local gradientNote = containerGroup:AddWidget(GUI:CreateLabel(self.child, "|cFF888888" .. L["Right Edge is not available in the Blizzard API."] .. "|r", 260), 20)
-        gradientNote.hideOn = HideContainerOverlayOptions
-
-        -- Show Dispel Icons checkbox
-        local containerShowIcons = containerGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Show Dispel Icons"], db, "bossDebuffsContainerOverlayShowIcons", function()
-            if DF.PreviewPrivateAuraAnchors then DF:PreviewPrivateAuraAnchors() end
-        end), 30)
-        containerShowIcons.hideOn = HideContainerOverlayOptions
-
-        containerGroup.hideOn = HideBossDebuffOptions
-        Add(containerGroup, nil, 2)
-        end -- IS_CONTAINER_SUPPORTED
+        -- Private Aura Dispel Overlay settings moved to the Dispel Overlay tab
+        -- under the "Blizzard" source. The container's enable state and options
+        -- are now driven by dispelOverlaySource and the unified dispel-type
+        -- dropdown. This subsection is intentionally left empty.
 
         -- See Also links
         AddSpace(20, "both")
@@ -7153,53 +7137,140 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
     BuildPage(pageDispel, function(self, db, Add, AddSpace, AddSyncPoint)
         -- Copy button at top
         Add(CreateCopyButton(self.child, {"dispel"}, L["Dispel Overlay"], "auras_dispel"), 25, 2)
-        
+
         AddSpace(10, "both")
-        
-        local function HideDispelOptions(d)
-            return not d.dispelOverlayEnabled
+
+        local function HideIfSourceOff(d)
+            return d.dispelOverlaySource == "off"
         end
-        
+        local function HideIfNotDF(d)
+            local s = d.dispelOverlaySource
+            return s ~= "dandersframes" and s ~= "both"
+        end
+        local function HideIfNotBlizzard(d)
+            local s = d.dispelOverlaySource
+            return s ~= "blizzard" and s ~= "both"
+        end
+        -- Kept for back-compat inside this function — alias for HideIfNotDF.
+        local HideDispelOptions = HideIfNotDF
+
         local function InvalidateCurves()
             if DF.InvalidateDispelColorCurve then DF:InvalidateDispelColorCurve() end
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
         end
-        
-        -- ===== SETTINGS GROUP (Column 1) =====
-        local settingsGroup = GUI:CreateSettingsGroup(self.child, 280)
-        settingsGroup:AddWidget(GUI:CreateHeader(self.child, L["Settings"]), 40)
-        settingsGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Enable Dispel Overlay"], db, "dispelOverlayEnabled", function()
-            self:RefreshStates()
+
+        -- Called when the overlay source changes: refresh DF's overlay and
+        -- rebuild the Blizzard container anchor per the new source value.
+        local function OnSourceChanged()
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
-        end), 30)
-        settingsGroup:AddWidget(GUI:CreateLabel(self.child, L["Shows a colored border/glow when a dispellable debuff is present."], 250), 35)
-        local partyDbDispel = DF.db.party
-        local dispelIndicatorOptions = { [1]= L["All Dispellable"], [2]= L["Dispellable By Me"] }
-        local dispelIndicatorDropdown = settingsGroup:AddWidget(GUI:CreateDropdown(self.child, L["Show Overlay For"], dispelIndicatorOptions, partyDbDispel, "_blizzDispelIndicator", function()
-            local newValue = partyDbDispel._blizzDispelIndicator or 1
-            if newValue == 0 then partyDbDispel._blizzDispelIndicator = 1; newValue = 1 end
+            if DF.PreviewPrivateAuraAnchors then
+                DF:PreviewPrivateAuraAnchors()
+            elseif DF.UpdateContainerOverlaySettings and DF.IterateAllFrames then
+                DF:IterateAllFrames(function(f)
+                    DF:UpdateContainerOverlaySettings(f)
+                end)
+            end
+        end
+        local function OnDispelTypeChanged()
             InvalidateCurves()
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
+            if DF.UpdateContainerOverlaySettings and DF.IterateAllFrames then
+                DF:IterateAllFrames(function(f)
+                    DF:UpdateContainerOverlaySettings(f)
+                end)
+            end
+        end
+
+        -- ===== OVERLAY SOURCE (full-width, always visible) =====
+        -- Segmented button group + themed callout that explains the selected
+        -- mode. Shared "Show Overlay For" dropdown sits below in a narrow
+        -- column-1 group.
+        local sourceHeader = GUI:CreateHeader(self.child, L["Overlay Source"])
+        Add(sourceHeader, 36, "both")
+        GUI:AddSectionNewBadge(sourceHeader, "auras_dispel", "overlaySource")
+
+        -- Four options in the user's preferred display order.
+        local sourceOptions = {
+            { value = "both",          label = L["Hybrid"],   subtitle = L["Recommended"] },
+            { value = "dandersframes", label = "DandersFrames", subtitle = L["No Boss Debuffs"] },
+            { value = "blizzard",      label = L["Blizzard"], subtitle = L["Limited Options"] },
+            { value = "off",           label = L["Off"],      subtitle = "" },
+        }
+
+        local calloutBox  -- forward declaration so the button callback can update it
+        local function UpdateCalloutForSource()
+            local s = db.dispelOverlaySource or "both"
+            if s == "both" then
+                calloutBox:SetContent(L["Hybrid Mode"], L["DandersFrames overlay shows for normal dispellable debuffs. Blizzard overlay activates only when a boss debuff (private aura) is present — private auras are invisible to addons, so only Blizzard can show them."])
+            elseif s == "dandersframes" then
+                calloutBox:SetContent(L["DandersFrames Mode"], L["DandersFrames overlay handles all normal dispellable debuffs with full customisation. Boss debuffs (private auras) are not covered."])
+            elseif s == "blizzard" then
+                calloutBox:SetContent(L["Blizzard Mode"], L["Blizzard's native overlay covers both normal debuffs and boss debuffs (private auras), with limited customisation options."])
+            else
+                calloutBox:SetContent(L["Off Mode"], L["No dispel overlay is displayed."])
+            end
+        end
+
+        local sourceButtons = GUI:CreateSegmentedButtonGroup(self.child, sourceOptions, db, "dispelOverlaySource", function()
+            OnSourceChanged()
+            UpdateCalloutForSource()
+            self:RefreshStates()
+            GUI:RefreshCurrentPage()
+        end, 560)
+        Add(sourceButtons, 42, "both")
+
+        calloutBox = GUI:CreateInfoCallout(self.child, 560, 60)
+        UpdateCalloutForSource()
+        Add(calloutBox, 66, "both")
+
+        -- Narrow settings group for the shared "Show Overlay For" dropdown.
+        AddSpace(8, "both")
+        local settingsGroup = GUI:CreateSettingsGroup(self.child, 280)
+        settingsGroup:AddWidget(GUI:CreateHeader(self.child, L["Settings"]), 40)
+        local dispelIndicatorOptions = { [1]= L["Dispellable By Me"], [2]= L["All Dispellable"] }
+        local dispelIndicatorDropdown = settingsGroup:AddWidget(GUI:CreateDropdown(self.child, L["Show Overlay For"], dispelIndicatorOptions, db, "dispelOverlayDispelType", function()
+            OnDispelTypeChanged()
         end), 55)
-        dispelIndicatorDropdown.hideOn = HideDispelOptions
-        local showBorder = settingsGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Show Border"], db, "dispelShowBorder", function()
+        dispelIndicatorDropdown.hideOn = HideIfSourceOff
+        settingsGroup.hideOn = HideIfSourceOff
+        Add(settingsGroup, nil, 1)
+
+        -- ===== DANDERSFRAMES COLLAPSIBLE SECTION =====
+        -- Wraps all DandersFrames-overlay SettingsGroups below. Header hides
+        -- entirely when source doesn't include DandersFrames; groups hide
+        -- via their own hideOn + the section's collapsed state.
+        AddSyncPoint()
+        AddSpace(10, "both")
+        local dfSection = GUI:CreateCollapsibleSection(self.child, L["DandersFrames Overlay"], true, 560)
+        dfSection.hideOn = HideIfNotDF
+        -- Tag: DandersFrames only ever handles normal dispellable debuffs,
+        -- never private auras, so the tag is static.
+        dfSection:SetTag("[" .. L["Normal Dispels"] .. "]")
+        Add(dfSection, 36, "both")
+
+        -- Display group (quick toggles) — Column 1
+        local displayGroup = GUI:CreateSettingsGroup(self.child, 280)
+        displayGroup:AddWidget(GUI:CreateHeader(self.child, L["Display"]), 40)
+        local showBorder = displayGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Show Border"], db, "dispelShowBorder", function()
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
         end), 30)
         showBorder.hideOn = HideDispelOptions
-        local showGradient = settingsGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Show Gradient"], db, "dispelShowGradient", function()
+        local showGradient = displayGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Show Gradient"], db, "dispelShowGradient", function()
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
         end), 30)
         showGradient.hideOn = HideDispelOptions
-        local animate = settingsGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Pulse Animation"], db, "dispelAnimate", function()
+        local animate = displayGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Pulse Animation"], db, "dispelAnimate", function()
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
         end), 30)
         animate.hideOn = HideDispelOptions
-        local nameTextCheck = settingsGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Color Name Text"], db, "dispelNameText", function()
+        local nameTextCheck = displayGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Color Name Text"], db, "dispelNameText", function()
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
         end), 30)
         nameTextCheck.hideOn = HideDispelOptions
-        Add(settingsGroup, nil, 1)
-        
+        displayGroup.hideOn = HideDispelOptions
+        dfSection:RegisterChild(displayGroup)
+        Add(displayGroup, nil, 1)
+
         -- ===== ICON GROUP (Column 2) =====
         local iconGroup = GUI:CreateSettingsGroup(self.child, 280)
         iconGroup:AddWidget(GUI:CreateHeader(self.child, L["Dispel Type Icon"]), 40)
@@ -7207,7 +7278,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
         end), 30)
         showIcon.hideOn = HideDispelOptions
-        local HideIconOptions = function(d) return not d.dispelOverlayEnabled or d.dispelShowIcon == false end
+        local HideIconOptions = function(d) return HideIfNotDF(d) or d.dispelShowIcon == false end
         local iconSize = iconGroup:AddWidget(GUI:CreateSlider(self.child, L["Icon Size"], 10, 40, 1, db, "dispelIconSize", function()
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
         end, function() DF:LightweightUpdateDispelOverlay() end, true), 55)
@@ -7235,8 +7306,9 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         end, function() DF:LightweightUpdateDispelOverlay() end, true), 55)
         iconOffsetY.hideOn = HideIconOptions
         iconGroup.hideOn = HideDispelOptions
+        dfSection:RegisterChild(iconGroup)
         Add(iconGroup, nil, 2)
-        
+
         -- ===== BORDER GROUP (Column 1) =====
         local borderGroup = GUI:CreateSettingsGroup(self.child, 280)
         borderGroup:AddWidget(GUI:CreateHeader(self.child, L["Border"]), 40)
@@ -7253,8 +7325,9 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         end, function() DF:LightweightUpdateDispelOverlay() end, true), 55)
         borderAlpha.hideOn = HideDispelOptions
         borderGroup.hideOn = HideDispelOptions
+        dfSection:RegisterChild(borderGroup)
         Add(borderGroup, nil, 1)
-        
+
         -- ===== COLORS GROUP (Column 2) =====
         local colorsGroup = GUI:CreateSettingsGroup(self.child, 280)
         colorsGroup:AddWidget(GUI:CreateHeader(self.child, L["Custom Dispel Colors"]), 40)
@@ -7279,8 +7352,9 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         end), 30)
         resetColors.hideOn = HideDispelOptions
         colorsGroup.hideOn = HideDispelOptions
+        dfSection:RegisterChild(colorsGroup)
         Add(colorsGroup, nil, 2)
-        
+
         -- ===== PIXEL GLOW GROUP (Column 1) =====
         local pixelGlowGroup = GUI:CreateSettingsGroup(self.child, 280)
         pixelGlowGroup:AddWidget(GUI:CreateHeader(self.child, L["Pixel Glow"]), 40)
@@ -7324,7 +7398,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         local onHealthCheck = gradientGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Show On Current Health Only"], db, "dispelGradientOnCurrentHealth", function()
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
         end), 30)
-        onHealthCheck.hideOn = function(d) return not d.dispelOverlayEnabled or d.dispelGradientStyle ~= "FULL" end
+        onHealthCheck.hideOn = function(d) return HideIfNotDF(d) or d.dispelGradientStyle ~= "FULL" end
         local gradSize = gradientGroup:AddWidget(GUI:CreateSlider(self.child, L["Gradient Size"], 0.1, 1.0, 0.1, db, "dispelGradientSize", function()
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
         end, function() DF:LightweightUpdateDispelOverlay() end, true), 55)
@@ -7343,8 +7417,9 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         end), 55)
         blendDropdown.hideOn = HideDispelOptions
         gradientGroup.hideOn = HideDispelOptions
+        dfSection:RegisterChild(gradientGroup)
         Add(gradientGroup, nil, 1)
-        
+
         -- ===== DARKEN GROUP (Column 2) =====
         local darkenGroup = GUI:CreateSettingsGroup(self.child, 280)
         darkenGroup:AddWidget(GUI:CreateHeader(self.child, L["Darken Effect"]), 40)
@@ -7356,10 +7431,74 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         local darkenAlpha = darkenGroup:AddWidget(GUI:CreateSlider(self.child, L["Darken Amount"], 0.1, 1.0, 0.05, db, "dispelGradientDarkenAlpha", function()
             if DF.UpdateAllDispelOverlays then DF:UpdateAllDispelOverlays() end
         end, function() DF:LightweightUpdateDispelOverlay() end, true), 55)
-        darkenAlpha.hideOn = function(d) return not d.dispelOverlayEnabled or not d.dispelGradientDarkenEnabled end
+        darkenAlpha.hideOn = function(d) return HideIfNotDF(d) or not d.dispelGradientDarkenEnabled end
         darkenGroup.hideOn = HideDispelOptions
+        dfSection:RegisterChild(darkenGroup)
         Add(darkenGroup, nil, 2)
-        
+
+        -- ===== BLIZZARD OVERLAY COLLAPSIBLE SECTION =====
+        -- Only relevant for sources "blizzard" and "both". Header hides
+        -- entirely when source excludes Blizzard.
+        local CLIENT_VERSION = select(4, GetBuildInfo())
+        local IS_CONTAINER_SUPPORTED = CLIENT_VERSION >= 120005
+        if IS_CONTAINER_SUPPORTED then
+            AddSyncPoint()
+            AddSpace(15, "both")
+            local blizSection = GUI:CreateCollapsibleSection(self.child, L["Blizzard Overlay"], true, 560)
+            blizSection.hideOn = HideIfNotBlizzard
+            -- Tag reflects what the Blizzard overlay actually handles under
+            -- the current source mode:
+            --   Hybrid   → only private auras (DandersFrames handles normals)
+            --   Blizzard → both (Blizzard runs alone for every dispellable)
+            local function UpdateBlizSectionTag()
+                local s = db.dispelOverlaySource or "both"
+                local privateTag = "[" .. L["Private Aura Dispels"] .. "]"
+                local normalTag  = "[" .. L["Normal Dispels"] .. "]"
+                if s == "both" then
+                    blizSection:SetTag(privateTag)
+                elseif s == "blizzard" then
+                    blizSection:SetTag(normalTag .. " " .. privateTag)
+                else
+                    blizSection:SetTag(nil)
+                end
+            end
+            UpdateBlizSectionTag()
+            blizSection.refreshContent = function(self) UpdateBlizSectionTag() end
+            Add(blizSection, 36, "both")
+
+            local blizGroup = GUI:CreateSettingsGroup(self.child, 280)
+            blizGroup:AddWidget(GUI:CreateLabel(self.child, "|cFFFF4444Note:|r " .. L["This overlay is rendered by Blizzard and has limited customisation. It is separate from the DandersFrames overlay above."], 260), 60)
+
+            local gradientDirOptions = {
+                [0] = L["Top Edge"],
+                [1] = L["Bottom Edge"],
+                [2] = L["Left Edge"],
+            }
+            local blizGradientDir = blizGroup:AddWidget(GUI:CreateDropdown(self.child, L["Gradient Direction"], gradientDirOptions, db, "bossDebuffsContainerOverlayGradientDir", function()
+                if DF.IterateAllFrames then
+                    DF:IterateAllFrames(function(f)
+                        if DF.UpdateContainerOverlaySettings then DF:UpdateContainerOverlaySettings(f) end
+                    end)
+                end
+            end), 55)
+            blizGradientDir.hideOn = HideIfNotBlizzard
+            local gradientNote = blizGroup:AddWidget(GUI:CreateLabel(self.child, "|cFF888888" .. L["Right Edge is not available in the Blizzard API."] .. "|r", 260), 20)
+            gradientNote.hideOn = HideIfNotBlizzard
+
+            local blizAlpha = blizGroup:AddWidget(GUI:CreateSlider(self.child, L["Alpha"], 0.1, 1.0, 0.05, db, "bossDebuffsContainerOverlayAlpha", function()
+                if DF.IterateAllFrames then
+                    DF:IterateAllFrames(function(f)
+                        if DF.UpdateContainerOverlaySettings then DF:UpdateContainerOverlaySettings(f) end
+                    end)
+                end
+            end), 40)
+            blizAlpha.hideOn = HideIfNotBlizzard
+
+            blizGroup.hideOn = HideIfNotBlizzard
+            blizSection:RegisterChild(blizGroup)
+            Add(blizGroup, nil, 1)
+        end
+
         -- See Also links
         AddSpace(20, "both")
         Add(GUI:CreateSeeAlso(self.child, {

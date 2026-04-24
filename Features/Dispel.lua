@@ -1551,6 +1551,11 @@ local function HideDispelAndInvalidate(frame)
     end
     RevertDispelNameText(frame)
     frame.dfLastDispelAuraID = nil
+    -- DF's overlay just went hidden — let the Blizzard container wrapper
+    -- show so private-aura dispels still get an overlay.
+    if DF.UpdateContainerOverlayVisibility then
+        DF:UpdateContainerOverlayVisibility(frame)
+    end
 end
 
 function DF:UpdateDispelOverlay(frame)
@@ -1569,17 +1574,31 @@ function DF:UpdateDispelOverlay(frame)
     local isRaidFrame = frame.isRaidFrame
     local inRelevantTestMode = (isRaidFrame and DF.raidTestMode) or (not isRaidFrame and DF.testMode)
 
-    -- In test mode, check testShowDispelGlow; otherwise check dispelOverlayEnabled
+    -- Decide whether DF's own overlay path should run. In test mode we
+    -- honour testShowDispelGlow; otherwise DF runs only for sources
+    -- "dandersframes" and "both" (Hybrid).
+    local shouldRun
     if inRelevantTestMode then
-        if not db or not db.testShowDispelGlow then
-            HideDispelAndInvalidate(frame)
-            return
-        end
+        shouldRun = db and db.testShowDispelGlow
     else
-        if not db or not db.dispelOverlayEnabled then
+        local src = db and db.dispelOverlaySource
+        shouldRun = db and (src == "dandersframes" or src == "both")
+    end
+
+    if not shouldRun then
+        -- Only run the cleanup path when there's DF overlay state that actually
+        -- needs clearing. On a fresh frame in Blizzard / Off mode, every flag
+        -- below is falsy and we skip HideDispelAndInvalidate entirely (which
+        -- also skips a redundant UpdateContainerOverlayVisibility call). This
+        -- matters in combat where UpdateDispelOverlay fires many times per
+        -- second per frame via TriggerAuraUpdateForUnit.
+        local hasState = (frame.dfDispelOverlay and frame.dfDispelOverlay:IsShown())
+                       or frame.dfDispelNameTextActive
+                       or (frame.dfLastDispelAuraID ~= nil)
+        if hasState then
             HideDispelAndInvalidate(frame)
-            return
         end
+        return
     end
 
     local unit = frame.unit
@@ -1614,6 +1633,9 @@ function DF:UpdateDispelOverlay(frame)
             -- Test mode doesn't use the last-rendered-aura skip — it has
             -- its own lifecycle and can re-render every tick cheaply.
             frame.dfLastDispelAuraID = nil
+            if DF.UpdateContainerOverlayVisibility then
+                DF:UpdateContainerOverlayVisibility(frame)
+            end
         else
             HideDispelAndInvalidate(frame)
         end
@@ -1656,14 +1678,13 @@ function DF:UpdateDispelOverlay(frame)
     local bleedColor = db.dispelBleedColor
     local showBleeds = bleedColor and (bleedColor.r > 0 or bleedColor.g > 0 or bleedColor.b > 0)
 
-    -- Determine dispel mode:
-    -- _blizzDispelIndicator: 1 = All Dispellable, 2 = Dispellable By Me
-    local partyDb = DF.db and DF.db.party
-    local dispelIndicator = partyDb and partyDb._blizzDispelIndicator or 1
+    -- Determine dispel type:
+    -- dispelOverlayDispelType (Blizzard convention): 1 = Dispellable By Me, 2 = All Dispellable
+    local dispelType = db.dispelOverlayDispelType or 2
 
     local cache = DF.BlizzardAuraCache and DF.BlizzardAuraCache[unit]
 
-    if dispelIndicator == 2 then
+    if dispelType == 1 then
         -- "Dispellable By Me": use playerDispellable cache (RAID_PLAYER_DISPELLABLE filtered)
         if cache and cache.playerDispellable then
             local auraInstanceID = next(cache.playerDispellable)
@@ -1782,6 +1803,13 @@ function DF:UpdateDispelOverlay(frame)
             print("|cffff0000DF Dispel:|r No dispellable debuffs found")
         end
     end
+
+    -- Gate the Blizzard native dispel overlay: show it only when DF's own
+    -- overlay is hidden, so private auras still get an overlay without
+    -- doubling up for normal dispellable debuffs.
+    if DF.UpdateContainerOverlayVisibility then
+        DF:UpdateContainerOverlayVisibility(frame)
+    end
 end
 
 -- ============================================================
@@ -1804,6 +1832,9 @@ function DF:ClearAllDispelOverlays()
                 HideOverlay(frame.dfDispelOverlay)
             end
             RevertDispelNameText(frame)
+            if DF.UpdateContainerOverlayVisibility then
+                DF:UpdateContainerOverlayVisibility(frame)
+            end
         end
     end
 
@@ -1864,7 +1895,8 @@ function DF:DebugDispel(unit)
     print("|cff00ff00DandersFrames:|r Dispel Debug for " .. unit)
     
     local db = DF:GetDB()
-    print("  dispelOverlayEnabled: " .. tostring(db and db.dispelOverlayEnabled))
+    print("  dispelOverlaySource: " .. tostring(db and db.dispelOverlaySource))
+    print("  dispelOverlayDispelType: " .. tostring(db and db.dispelOverlayDispelType))
     
     -- Get debuffs sorted by expiration
     local sortRule = Enum.UnitAuraSortRule and Enum.UnitAuraSortRule.Expiration or 3
