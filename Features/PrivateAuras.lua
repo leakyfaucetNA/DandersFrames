@@ -144,7 +144,12 @@ function DF:SetupPrivateAuraAnchors(frame)
     end
     frameAnchors[frame] = {}
 
-    local baseLevel = frame:GetFrameLevel()
+    -- Anchor against contentOverlay's level (the icon's actual parent in the
+    -- normal case) rather than the unit frame's. The unit button's level can
+    -- shift mid-life as the secure header reshuffles slots; contentOverlay's
+    -- level is set once at create time and matches what every other indicator
+    -- uses as its base.
+    local baseLevel = (frame.contentOverlay or frame):GetFrameLevel()
 
     for i = 1, maxIcons do
         -- Lazy-create the icon frame
@@ -440,7 +445,7 @@ SetupContainerOverlay = function(frame, unit, db)
     wrapper:SetParent(frame)
     wrapper:ClearAllPoints()
     wrapper:SetAllPoints(frame)
-    wrapper:SetFrameLevel(frame:GetFrameLevel() + 6)
+    wrapper:SetFrameLevel(frame:GetFrameLevel() + (db.bossDebuffsContainerOverlayFrameLevel or 6))
     -- Always keep the wrapper Shown so Blizzard's container eventFrame
     -- (a descendant, see Blizzard_PrivateAurasUI.lua:699-707) stays
     -- registered for UNIT_AURA. Visibility is controlled via alpha so
@@ -631,6 +636,13 @@ function DF:UpdateContainerOverlaySettings(frame)
     wrapper:SetAttribute("dispel-indicator-option", db.dispelOverlayDispelType or 2)
     wrapper:SetAttribute("aura-organization-type", db.bossDebuffsContainerOverlayGradientDir)
 
+    -- Live frame-level adjustment (user may need to raise it above text on
+    -- short/wide frames where DF's content overlay covers the gradient).
+    local parent = wrapper:GetParent()
+    if parent then
+        wrapper:SetFrameLevel(parent:GetFrameLevel() + (db.bossDebuffsContainerOverlayFrameLevel or 6))
+    end
+
     -- Push the user alpha directly so Blizzard-mode slider changes take
     -- effect (UpdateContainerOverlayVisibility is Hybrid-only now and would
     -- no-op otherwise). In Hybrid mode the gate call immediately overrides
@@ -709,30 +721,13 @@ end
 -- LIGHTWEIGHT REANCHOR (unit token changed, frames stay)
 -- ============================================================
 
--- POTENTIAL FUTURE IMPROVEMENT:
--- Grid2's IndicatorPrivateAurasDispells re-applies "group-type" and
--- "update-settings" on the wrapper every time the unit token changes,
--- so Blizzard's PrivateAuraAnchorContainer re-reads its settings on each
--- unit re-anchor. We currently set "group-type" once in SetupContainerOverlay
--- based on the initial unit token.
---
--- In practice this doesn't matter today because:
---   * DF keeps party and raid frames in separate secure headers, so a wrapper
---     created for a party unit never gets re-assigned to a raid unit token.
---   * Blizzard's IsPartyFrame() returns true for both group-type 4 (Party)
---     and 5 (Raid), so the value only discriminates party-like vs other.
---     No aura currently uses hideOnPartyFrames to split 4 vs 5.
---
--- If either of those changes, or if we add more dynamic attributes later,
--- mirroring Grid2's approach (SetAttribute on group-type + update-settings
--- inside ReanchorPrivateAuras and/or SetupContainerOverlay's reanchor path)
--- would bulletproof us.
+-- Rebinds all private aura anchors (icon, per-slot overlay, and container
+-- overlay) for a frame whose unit token shifted. Safe to call in combat since
+-- 12.0.5 lifted the combat lock on AddPrivateAuraAnchor / RemovePrivateAuraAnchor.
+-- The container overlay path re-applies "group-type" + "update-settings" so the
+-- Blizzard container re-reads its attributes on re-register (matches Grid2).
 function DF:ReanchorPrivateAuras(frame)
     if not frame or not frame.unit then return end
-    if InCombatLockdown() then
-        needsPostCombatSetup = true
-        return
-    end
     if not frame.bossDebuffFrames or #frame.bossDebuffFrames == 0 then return end
 
     -- PERF TEST: Skip if disabled
@@ -763,13 +758,20 @@ function DF:ReanchorPrivateAuras(frame)
     local iconHeight    = db.bossDebuffsIconHeight or 20
     local borderScale   = db.bossDebuffsBorderScale or 1.0
     local textScale     = db.bossDebuffsTextScale or 1.0
+    local frameLevel    = db.bossDebuffsFrameLevel or 35
     local scaledIconW   = iconWidth  / textScale
     local scaledIconH   = iconHeight / textScale
     local scaledBorder  = borderScale / textScale
 
+    -- Re-apply icon frame level. The unit button's level can shift across
+    -- secure header reshuffles, so a level captured at first SetupPrivateAuraAnchors
+    -- can drift and leave icons rendering behind frame elements.
+    local baseLevel = (frame.contentOverlay or frame):GetFrameLevel()
+
     -- Re-register each frame with new unit token
     for i, iconFrame in ipairs(frame.bossDebuffFrames) do
         if iconFrame:IsShown() then
+            iconFrame:SetFrameLevel(baseLevel + frameLevel)
             local success, anchorID = pcall(function()
                 return C_UnitAuras.AddPrivateAuraAnchor({
                     unitToken = newUnit,
@@ -849,6 +851,39 @@ function DF:ReanchorPrivateAuras(frame)
         end
     end
 
+    -- Rebind container overlay anchor (12.0.5+ isContainer=true path)
+    if IS_CONTAINER_SUPPORTED then
+        local src = db.dispelOverlaySource or "both"
+        if (src == "blizzard" or src == "both") and frame.containerOverlayFrame then
+            local oldContainerAnchor = containerOverlayAnchors[frame]
+            if oldContainerAnchor then
+                pcall(function()
+                    C_UnitAuras.RemovePrivateAuraAnchor(oldContainerAnchor)
+                end)
+                containerOverlayAnchors[frame] = nil
+            end
+
+            local wrapper = frame.containerOverlayFrame
+            local groupType = newUnit:find("^party") and 4 or 5
+            wrapper:SetAttribute("group-type", groupType)
+            wrapper:SetAttribute("update-settings", true)
+
+            local cSuccess, cAnchorID = pcall(function()
+                return C_UnitAuras.AddPrivateAuraAnchor({
+                    unitToken = newUnit,
+                    parent = wrapper,
+                    isContainer = true,
+                    auraIndex = 1,
+                    showCountdownFrame = false,
+                    showCountdownNumbers = false,
+                })
+            end)
+            if cSuccess and cAnchorID then
+                containerOverlayAnchors[frame] = cAnchorID
+            end
+        end
+    end
+
     frame.bossDebuffAnchoredUnit = newUnit
 
     if DF.bossDebuffDebug then
@@ -868,10 +903,6 @@ function DF:SchedulePrivateAuraReanchor()
     pendingReanchor = true
     C_Timer.After(0, function()
         pendingReanchor = false
-        if InCombatLockdown() then
-            needsPostCombatSetup = true
-            return
-        end
         if DF.IterateAllFrames then
             DF:IterateAllFrames(function(frame)
                 if frame and frame.unit then
@@ -955,7 +986,7 @@ function DF:UpdateAllPrivateAuraFrameLevel()
             if not frame or not frame.bossDebuffFrames then return end
             local db = DF:GetFrameDB(frame)
             local frameLevel = db.bossDebuffsFrameLevel or 35
-            local baseLevel = frame:GetFrameLevel()
+            local baseLevel = (frame.contentOverlay or frame):GetFrameLevel()
             for _, iconFrame in ipairs(frame.bossDebuffFrames) do
                 iconFrame:SetFrameLevel(baseLevel + frameLevel)
             end
