@@ -1,10 +1,17 @@
 # DandersFrames Changelog
 
-## [4.3.4] - 2026-04-24
+## [4.3.5] - 2026-04-26
 
 ### Improvements
 
-* (Dispel Overlay) Added a Frame Level slider to the Blizzard overlay settings. Raise it above 25 if the overlay gets hidden behind frame text on short/wide frames.
+* (Dispel Overlay) Added a Frame Strata dropdown and Frame Level slider to the Blizzard overlay settings. Raise them if the overlay gets hidden behind frame text on short/wide frames.
+* (Boss Debuffs) Added a Frame Strata dropdown next to Frame Level. Default is now HIGH so private aura icons always render above frame text and borders, including for users with small icon sizes. Lower it via the dropdown if you preferred the old behaviour.
+
+### Bug Fixes
+
+* (Tooltips) Fix aura tooltips being overwritten by the unit tooltip when hovering buffs and debuffs
+
+## [4.3.4] - 2026-04-24
 
 ### Changes
 
@@ -18,6 +25,7 @@
 * (Range) Fix Lua error spam from range checks during timewalking dungeons
 * (Update Notification) Fix remaining "You aren't in a party." chat spam in delves and follower dungeons
 * (Boss Debuffs) Fix boss debuff icons occasionally rendering behind the unit frame on some group members
+* (Tooltips) Fix buff/debuff tooltip flickering with the unit tooltip when hovering an aura icon after entering the frame body
 
 ## [4.3.3] - 2026-04-21
 

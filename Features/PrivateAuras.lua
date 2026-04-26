@@ -182,6 +182,7 @@ function DF:SetupPrivateAuraAnchors(frame)
 
         iconFrame:SetParent(frame.contentOverlay or frame)
         iconFrame:ClearAllPoints()
+        iconFrame:SetFrameStrata(db.bossDebuffsStrata or "HIGH")
         iconFrame:SetFrameLevel(baseLevel + frameLevel)
 
         -- hideTooltip: shrink the parent to sub-pixel so Blizzard's C-side icon
@@ -465,6 +466,7 @@ SetupContainerOverlay = function(frame, unit, db)
     wrapper:SetParent(frame)
     wrapper:ClearAllPoints()
     wrapper:SetAllPoints(frame)
+    wrapper:SetFrameStrata(db.bossDebuffsContainerOverlayStrata or "MEDIUM")
     wrapper:SetFrameLevel(frame:GetFrameLevel() + (db.bossDebuffsContainerOverlayFrameLevel or 6))
     -- Always keep the wrapper Shown so Blizzard's container eventFrame
     -- (a descendant, see Blizzard_PrivateAurasUI.lua:699-707) stays
@@ -656,8 +658,10 @@ function DF:UpdateContainerOverlaySettings(frame)
     wrapper:SetAttribute("dispel-indicator-option", db.dispelOverlayDispelType or 2)
     wrapper:SetAttribute("aura-organization-type", db.bossDebuffsContainerOverlayGradientDir)
 
-    -- Live frame-level adjustment (user may need to raise it above text on
-    -- short/wide frames where DF's content overlay covers the gradient).
+    -- Live strata + frame-level adjustment (user may need to raise these above
+    -- text on short/wide frames where DF's content overlay covers the gradient,
+    -- or to push Blizzard's level-0 child render frames above DF elements).
+    wrapper:SetFrameStrata(db.bossDebuffsContainerOverlayStrata or "MEDIUM")
     local parent = wrapper:GetParent()
     if parent then
         wrapper:SetFrameLevel(parent:GetFrameLevel() + (db.bossDebuffsContainerOverlayFrameLevel or 6))
@@ -789,8 +793,10 @@ function DF:ReanchorPrivateAuras(frame)
     local baseLevel = (frame.contentOverlay or frame):GetFrameLevel()
 
     -- Re-register each frame with new unit token
+    local strata = db.bossDebuffsStrata or "HIGH"
     for i, iconFrame in ipairs(frame.bossDebuffFrames) do
         if iconFrame:IsShown() then
+            iconFrame:SetFrameStrata(strata)
             iconFrame:SetFrameLevel(baseLevel + frameLevel)
             local success, anchorID = pcall(function()
                 return C_UnitAuras.AddPrivateAuraAnchor({
@@ -1009,6 +1015,19 @@ function DF:UpdateAllPrivateAuraFrameLevel()
             local baseLevel = (frame.contentOverlay or frame):GetFrameLevel()
             for _, iconFrame in ipairs(frame.bossDebuffFrames) do
                 iconFrame:SetFrameLevel(baseLevel + frameLevel)
+            end
+        end)
+    end)
+end
+
+function DF:UpdateAllPrivateAuraStrata()
+    QueueOrExecute("strata", function()
+        DF:IterateAllFrames(function(frame)
+            if not frame or not frame.bossDebuffFrames then return end
+            local db = DF:GetFrameDB(frame)
+            local strata = db.bossDebuffsStrata or "HIGH"
+            for _, iconFrame in ipairs(frame.bossDebuffFrames) do
+                iconFrame:SetFrameStrata(strata)
             end
         end)
     end)

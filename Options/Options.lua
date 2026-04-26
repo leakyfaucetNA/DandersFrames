@@ -5225,6 +5225,23 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             if DF.UpdateAllTestBossDebuffs then DF:UpdateAllTestBossDebuffs() end
         end, true), 55)
         frameLevel.hideOn = HideBossDebuffOptions
+
+        local bossDebuffStrataOptions = {
+            BACKGROUND = L["Background"],
+            LOW = L["Low"],
+            MEDIUM = L["Medium"],
+            HIGH = L["High"],
+            DIALOG = L["Dialog"],
+            _order = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG" },
+        }
+        local bossDebuffStrata = sizeGroup:AddWidget(GUI:CreateDropdown(self.child, L["Frame Strata"], bossDebuffStrataOptions, db, "bossDebuffsStrata", function()
+            if DF.UpdateAllPrivateAuraStrata then DF:UpdateAllPrivateAuraStrata() end
+            if DF.UpdateAllTestBossDebuffs then DF:UpdateAllTestBossDebuffs() end
+        end), 55)
+        bossDebuffStrata.hideOn = HideBossDebuffOptions
+        local bossDebuffStrataNote = sizeGroup:AddWidget(GUI:CreateLabel(self.child, "|cFF888888" .. L["Raise to HIGH if boss debuff icons render behind the frame on small icon sizes."] .. "|r", 260), 30)
+        bossDebuffStrataNote.hideOn = HideBossDebuffOptions
+
         sizeGroup.hideOn = HideBossDebuffOptions
         Add(sizeGroup, nil, 1)
 
@@ -7510,6 +7527,23 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             end), 40)
             blizAlpha.hideOn = HideIfNotBlizzard
 
+            local strataOptions = {
+                BACKGROUND = L["Background"],
+                LOW = L["Low"],
+                MEDIUM = L["Medium"],
+                HIGH = L["High"],
+                DIALOG = L["Dialog"],
+                _order = { "BACKGROUND", "LOW", "MEDIUM", "HIGH", "DIALOG" },
+            }
+            local blizStrata = blizGroup:AddWidget(GUI:CreateDropdown(self.child, L["Frame Strata"], strataOptions, db, "bossDebuffsContainerOverlayStrata", function()
+                if DF.IterateAllFrames then
+                    DF:IterateAllFrames(function(f)
+                        if DF.UpdateContainerOverlaySettings then DF:UpdateContainerOverlaySettings(f) end
+                    end)
+                end
+            end), 55)
+            blizStrata.hideOn = HideIfNotBlizzard
+
             local blizFrameLevel = blizGroup:AddWidget(GUI:CreateSlider(self.child, L["Frame Level"], 0, 50, 1, db, "bossDebuffsContainerOverlayFrameLevel", function()
                 if DF.IterateAllFrames then
                     DF:IterateAllFrames(function(f)
@@ -7518,7 +7552,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                 end
             end), 40)
             blizFrameLevel.hideOn = HideIfNotBlizzard
-            local frameLevelNote = blizGroup:AddWidget(GUI:CreateLabel(self.child, "|cFF888888" .. L["Raise above 25 if the overlay is hidden by frame text on short/wide frames."] .. "|r", 260), 30)
+            local frameLevelNote = blizGroup:AddWidget(GUI:CreateLabel(self.child, "|cFF888888" .. L["Raise strata or frame level if the overlay is hidden by frame text on short/wide frames."] .. "|r", 260), 30)
             frameLevelNote.hideOn = HideIfNotBlizzard
 
             blizGroup.hideOn = HideIfNotBlizzard

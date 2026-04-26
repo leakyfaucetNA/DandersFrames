@@ -394,6 +394,7 @@ DF.ExportCategories = {
         "bossDebuffsAnchor",
         "bossDebuffsBorderScale",
         "bossDebuffsFrameLevel",
+        "bossDebuffsStrata",
         "bossDebuffsGrowth",
         "bossDebuffsHideTooltip",
         "bossDebuffsIconHeight",
@@ -421,6 +422,7 @@ DF.ExportCategories = {
         "bossDebuffsContainerOverlayGradientDir",
         "bossDebuffsContainerOverlayAlpha",
         "bossDebuffsContainerOverlayFrameLevel",
+        "bossDebuffsContainerOverlayStrata",
 
         -- Buff Filters
         "buffFilterCancelable",
