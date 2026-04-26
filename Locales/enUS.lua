@@ -1155,6 +1155,7 @@ L["Right to Left"] = true
 L["Rogue"] = true
 L["Role Icon"] = true
 L["Role Priority"] = true
+L["Row Growth"] = true
 L["Row Spacing"] = true
 L["Rows"] = true
 L["Rows Grow From"] = true

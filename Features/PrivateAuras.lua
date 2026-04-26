@@ -122,6 +122,12 @@ function DF:SetupPrivateAuraAnchors(frame)
     local iconWidth    = db.bossDebuffsIconWidth or 20
     local iconHeight   = db.bossDebuffsIconHeight or 20
     local borderScale  = db.bossDebuffsBorderScale or 1.0
+    -- Wrap settings: when perRow < maxIcons, icons wrap into a new row
+    -- after every `perRow` icons. perRow defaults to maxIcons (no wrap).
+    local perRow       = db.bossDebuffsPerRow or maxIcons
+    if perRow < 1 then perRow = 1 end
+    if perRow > maxIcons then perRow = maxIcons end
+    local rowGrowth    = db.bossDebuffsRowGrowth or "DOWN"
     -- textScale: scales the container frame so Blizzard's rendered text
     -- (timer + stack count) inherits the scale automatically.
     -- The icon dimensions are divided by textScale so the visible icon
@@ -135,8 +141,9 @@ function DF:SetupPrivateAuraAnchors(frame)
     local scaledIconH  = iconHeight / textScale
     local scaledBorder = borderScale / textScale
 
-    -- Growth anchoring
+    -- Growth anchoring (primary: across the row; row: between rows)
     local pointOnCurrent, pointOnPrev, xMult, yMult = GetGrowthAnchors(growth)
+    local rowPointOnCurrent, rowPointOnPrev, rowXMult, rowYMult = GetGrowthAnchors(rowGrowth)
 
     -- Lazy-init frame storage
     if not frame.bossDebuffFrames then
@@ -203,19 +210,32 @@ function DF:SetupPrivateAuraAnchors(frame)
             end
             iconFrame:SetPoint(pointOnCurrent, frame, anchor, adjX, adjY)
         else
-            local prevFrame = frame.bossDebuffFrames[i - 1]
-            local gapX = spacing * xMult / textScale
-            local gapY = spacing * yMult / textScale
+            local colIdx = (i - 1) % perRow  -- 0-based column within the row
+            local isRowStart = (colIdx == 0)
+            -- Choose anchor target + direction:
+            --   Row-start (i = perRow + 1, 2*perRow + 1, ...) → anchor against
+            --   the first icon of the previous row in rowGrowth direction.
+            --   Otherwise → chain to the previous icon in primary growth.
+            local prevFrame, pCurrent, pPrev, pXMult, pYMult
+            if isRowStart then
+                prevFrame = frame.bossDebuffFrames[i - perRow]
+                pCurrent, pPrev, pXMult, pYMult = rowPointOnCurrent, rowPointOnPrev, rowXMult, rowYMult
+            else
+                prevFrame = frame.bossDebuffFrames[i - 1]
+                pCurrent, pPrev, pXMult, pYMult = pointOnCurrent, pointOnPrev, xMult, yMult
+            end
+            local gapX = spacing * pXMult / textScale
+            local gapY = spacing * pYMult / textScale
             if hideTooltip then
                 -- Frames are 0.001px so chaining loses the icon dimension.
                 -- Add a full icon width/height in screen space (divided by textScale
                 -- to convert to local coordinates for SetPoint).
-                -- abs() because xMult/yMult can be negative (LEFT/UP growth) — we
+                -- abs() because mults can be negative (LEFT/UP growth) — we
                 -- want to extend the gap, not cancel it.
-                gapX = gapX + iconWidth  * math.abs(xMult) / textScale
-                gapY = gapY + iconHeight * math.abs(yMult) / textScale
+                gapX = gapX + iconWidth  * math.abs(pXMult) / textScale
+                gapY = gapY + iconHeight * math.abs(pYMult) / textScale
             end
-            iconFrame:SetPoint(pointOnCurrent, prevFrame, pointOnPrev, gapX, gapY)
+            iconFrame:SetPoint(pCurrent, prevFrame, pPrev, gapX, gapY)
         end
 
         -- Restore normal mouse settings (EnableMouse alone is not sufficient to

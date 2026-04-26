@@ -401,6 +401,8 @@ DF.ExportCategories = {
         "bossDebuffsMax",
         "bossDebuffsOffsetX",
         "bossDebuffsOffsetY",
+        "bossDebuffsPerRow",
+        "bossDebuffsRowGrowth",
         "bossDebuffsShowCountdown",
         "bossDebuffsShowNumbers",
         "bossDebuffsSpacing",

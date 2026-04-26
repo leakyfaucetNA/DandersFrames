@@ -5139,6 +5139,22 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             if DF.UpdateAllTestBossDebuffs then DF:UpdateAllTestBossDebuffs() end
         end), 55)
         growth.hideOn = HideBossDebuffOptions
+        local perRow = positionGroup:AddWidget(GUI:CreateSlider(self.child, L["Icons Per Row"], 1, 4, 1, db, "bossDebuffsPerRow", nil, function()
+            if DF.UpdateAllPrivateAuraPositions then DF:UpdateAllPrivateAuraPositions() end
+            if DF.UpdateAllTestBossDebuffs then DF:UpdateAllTestBossDebuffs() end
+        end, true), 55)
+        perRow.hideOn = HideBossDebuffOptions
+        local rowGrowth = positionGroup:AddWidget(GUI:CreateDropdown(self.child, L["Row Growth"], growthOptions4, db, "bossDebuffsRowGrowth", function()
+            if DF.UpdateAllPrivateAuraPositions then DF:UpdateAllPrivateAuraPositions() end
+            if DF.UpdateAllTestBossDebuffs then DF:UpdateAllTestBossDebuffs() end
+        end), 55)
+        -- Hide the row-growth dropdown when wrapping isn't active (perRow >= maxIcons)
+        rowGrowth.hideOn = function(d)
+            if not d.bossDebuffsEnabled then return true end
+            local m = d.bossDebuffsMax or 4
+            local r = d.bossDebuffsPerRow or m
+            return r >= m
+        end
         local offsetX = positionGroup:AddWidget(GUI:CreateSlider(self.child, L["Offset X"], -150, 150, 1, db, "bossDebuffsOffsetX", nil, function()
             if DF.UpdateAllPrivateAuraPositions then DF:UpdateAllPrivateAuraPositions() end
             if DF.UpdateAllTestBossDebuffs then DF:UpdateAllTestBossDebuffs() end
