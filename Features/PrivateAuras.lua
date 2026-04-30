@@ -141,9 +141,13 @@ function DF:SetupPrivateAuraAnchors(frame)
     local scaledIconH  = iconHeight / textScale
     local scaledBorder = borderScale / textScale
 
-    -- Growth anchoring (primary: across the row; row: between rows)
-    local pointOnCurrent, pointOnPrev, xMult, yMult = GetGrowthAnchors(growth)
-    local rowPointOnCurrent, rowPointOnPrev, rowXMult, rowYMult = GetGrowthAnchors(rowGrowth)
+    -- Growth anchoring. We only need the direction multipliers (xMult/yMult)
+    -- since we use direct positioning rather than chain anchors. The
+    -- pointOnCurrent value is used as the anchor point on each iconFrame
+    -- so the user's `anchor` setting (e.g. "TOPLEFT") aligns the icon's
+    -- corresponding edge with the unit frame.
+    local pointOnCurrent, _, xMult, yMult = GetGrowthAnchors(growth)
+    local _, _, rowXMult, rowYMult = GetGrowthAnchors(rowGrowth)
 
     -- Lazy-init frame storage
     if not frame.bossDebuffFrames then
@@ -199,45 +203,32 @@ function DF:SetupPrivateAuraAnchors(frame)
             iconFrame:SetSize(scaledIconW, scaledIconH)
         end
 
-        if i == 1 then
-            local adjX = offsetX / textScale
-            local adjY = offsetY / textScale
-            if hideTooltip then
-                -- Icon renders centered on the 0.001px frame. Shift by half the
-                -- icon's screen-space size so its edge aligns with the anchor point.
-                -- Divide by textScale to convert screen pixels → local coordinates.
-                adjX = adjX + (iconWidth / 2) * xMult / textScale
-                adjY = adjY + (iconHeight / 2) * yMult / textScale
-            end
-            iconFrame:SetPoint(pointOnCurrent, frame, anchor, adjX, adjY)
-        else
-            local colIdx = (i - 1) % perRow  -- 0-based column within the row
-            local isRowStart = (colIdx == 0)
-            -- Choose anchor target + direction:
-            --   Row-start (i = perRow + 1, 2*perRow + 1, ...) → anchor against
-            --   the first icon of the previous row in rowGrowth direction.
-            --   Otherwise → chain to the previous icon in primary growth.
-            local prevFrame, pCurrent, pPrev, pXMult, pYMult
-            if isRowStart then
-                prevFrame = frame.bossDebuffFrames[i - perRow]
-                pCurrent, pPrev, pXMult, pYMult = rowPointOnCurrent, rowPointOnPrev, rowXMult, rowYMult
-            else
-                prevFrame = frame.bossDebuffFrames[i - 1]
-                pCurrent, pPrev, pXMult, pYMult = pointOnCurrent, pointOnPrev, xMult, yMult
-            end
-            local gapX = spacing * pXMult / textScale
-            local gapY = spacing * pYMult / textScale
-            if hideTooltip then
-                -- Frames are 0.001px so chaining loses the icon dimension.
-                -- Add a full icon width/height in screen space (divided by textScale
-                -- to convert to local coordinates for SetPoint).
-                -- abs() because mults can be negative (LEFT/UP growth) — we
-                -- want to extend the gap, not cancel it.
-                gapX = gapX + iconWidth  * math.abs(pXMult) / textScale
-                gapY = gapY + iconHeight * math.abs(pYMult) / textScale
-            end
-            iconFrame:SetPoint(pCurrent, prevFrame, pPrev, gapX, gapY)
+        -- Direct grid positioning — anchor each iconFrame directly to the
+        -- unit frame with a calculated offset, instead of chaining frame[i]
+        -- to frame[i-1]. Matches NSRT's approach for private aura layouts:
+        -- chain anchors can desync when the secure header reshuffles parent
+        -- frames mid-life or when textScale != 1, while absolute offsets
+        -- always resolve to the same screen position regardless.
+        local row = math.ceil(i / perRow) - 1   -- 0-based row index
+        local col = (i - 1) % perRow            -- 0-based column within row
+
+        -- Step magnitudes: a horizontal direction steps by iconWidth+spacing,
+        -- a vertical direction steps by iconHeight+spacing.
+        local primaryStep = (xMult ~= 0) and (iconWidth + spacing) or (iconHeight + spacing)
+        local rowStep     = (rowXMult ~= 0) and (iconWidth + spacing) or (iconHeight + spacing)
+
+        local offX = col * primaryStep * xMult + row * rowStep * rowXMult
+        local offY = col * primaryStep * yMult + row * rowStep * rowYMult
+
+        local adjX = (offsetX + offX) / textScale
+        local adjY = (offsetY + offY) / textScale
+        if hideTooltip then
+            -- Icon renders centered on the 0.001px frame. Shift by half the
+            -- icon's screen-space size so its edge aligns with the anchor.
+            adjX = adjX + (iconWidth / 2) * xMult / textScale
+            adjY = adjY + (iconHeight / 2) * yMult / textScale
         end
+        iconFrame:SetPoint(pointOnCurrent, frame, anchor, adjX, adjY)
 
         -- Restore normal mouse settings (EnableMouse alone is not sufficient to
         -- block tooltip on private auras, but keep it consistent).
