@@ -1,5 +1,30 @@
 # DandersFrames Changelog
 
+## [4.3.6] - 2026-04-30
+
+### Improvements
+
+* (Click Casting) Improved mouseover detection on hovered unit frames after a Blizzard API fix.
+* (Click Casting) The conflict popup for Clique and Clicked now also appears when switching to a click-cast profile that turns click casting on.
+* (Boss Debuffs) Updated the info banner to clarify that boss debuffs trigger dispel overlays in Hybrid or Blizzard mode.
+* (Boss Debuffs) Added an Inset slider for the Blizzard dispel overlay so the gradient can extend past or shrink inside the frame edges.
+* (Boss Debuffs) Replaced separate Icon Width and Icon Height sliders with a single Icon Size slider. Existing settings carry over to the larger of your two old values.
+* (Boss Debuffs) Added an Open Edit Mode button to the Blizzard Overlay settings so you can preview the Blizzard dispel overlay live.
+
+### Bug Fixes
+
+* (Pet Frames) Fix Lua error spam during boss pulls when a pet is in the group.
+* (Status Icons) Fix Lua error spam when the Status Icon font outline is set to "None".
+* (Update Notification) Fix "You aren't in a party." and "You aren't in a raid." chat spam in LFG dungeons, LFR, scenarios, and battlegrounds.
+* (Boss Debuffs) Fix icons sometimes staying invisible after a transient registration hiccup until you fully reload.
+* (Boss Debuffs) Fix icons not rendering at certain size combinations.
+* (Boss Debuffs) Skip private aura registration on pet frames — pets can't receive boss debuffs.
+* (Click Casting) Fix target click-cast bindings on DandersFrames hitting the /target name range limit.
+* (Boss Debuffs) Surface Blizzard private aura API errors instead of silently swallowing them.
+* (Boss Debuffs) Fix icons sometimes rendering behind the unit frame after a re-register, even with frame level raised.
+* (Aura Designer) Reduce GUI lag when opening Aura Designer with many configured effects.
+* (Dispel Overlay) Fix dispel type icons not fading when a unit goes out of range with element-specific alpha enabled.
+
 ## [4.3.5] - 2026-04-26
 
 ### Improvements
