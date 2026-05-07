@@ -1416,10 +1416,8 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         for i = 1, 8 do
             local groupIndex = i
             local overrideKey = "raidGroupVisible_" .. i
-            groupVisGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Group"] .. " " .. i, nil, nil, 
+            groupVisGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Group"] .. " " .. i, nil, nil,
                 function()
-                    -- Update test mode frames if active
-                    if DF.raidTestMode then DF:UpdateRaidTestFrames() end
                     if db.raidUseGroups then
                         -- Separated mode
                         DF:UpdateRaidHeaderVisibility(); DF:PositionRaidHeaders()
@@ -1430,6 +1428,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                             DF.FlatRaidFrames:UpdateSorting()
                         end
                     end
+                    UpdateFrames()
                 end,
                 function() return db.raidGroupVisible[groupIndex] ~= false end,
                 function(val) db.raidGroupVisible[groupIndex] = val end,
@@ -1450,6 +1449,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             if DF.UpdatePlayerGroupTracking then DF:UpdatePlayerGroupTracking() end
             if DF.UpdateRaidGroupOrderAttributes then DF:UpdateRaidGroupOrderAttributes() end
             DF:TriggerRaidPosition()
+            UpdateFrames()
         end), 25)
         playerGroupFirstCheck.tooltip = L["When enabled, the group you are in will always be displayed first."]
         
@@ -1461,8 +1461,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         local groupOrderWidget = GUI:CreateGroupOrderList(self.child, db, "raidGroupDisplayOrder", function()
             if DF.UpdateRaidGroupOrderAttributes then DF:UpdateRaidGroupOrderAttributes() end
             DF:TriggerRaidPosition()
-            -- Update test mode frames if active
-            if DF.raidTestMode then DF:UpdateRaidTestFrames() end
+            UpdateFrames()
         end)
         groupOrderGroup:AddWidget(groupOrderWidget, 230)
         
@@ -4909,16 +4908,6 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         debuffPaddingY.disableOn = function(d) return not d.showDebuffs end
         AddToSection(gridGroup, nil, 1)
         
-        -- Blizzard Settings Group (col2)
-        local blizzGroup = GUI:CreateSettingsGroup(self.child, 260)
-        blizzGroup:AddWidget(GUI:CreateHeader(self.child, L["Blizzard Frame Settings"]), 40)
-        blizzGroup:AddWidget(GUI:CreateLabel(self.child, L["Controls Blizzard's debuff filtering (affects our display too)."], 230), 35)
-        local partyDb = DF.db.party
-        blizzGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Only Dispellable Debuffs"], partyDb, "_blizzOnlyDispellable", function()
-            local newValue = partyDb._blizzOnlyDispellable
-            SetCVar("raidFramesDisplayOnlyDispellableDebuffs", newValue and 1 or 0)
-        end), 30)
-        AddToSection(blizzGroup, nil, 2)
         
         currentSection = nil
         AddSpace(10, "both")
@@ -5521,36 +5510,36 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             if DF.UpdateAllDefensiveBars then DF:UpdateAllDefensiveBars() end
         end), 55)
         diDurOutline.hideOn = HideDefensiveDurationOptions
-        
-        durationGroup.hideOn = HideDefensiveIconOptions
-        Add(durationGroup, nil, 1)
-        
-        -- ===== DURATION POSITION GROUP (Column 2) =====
-        local durPosGroup = GUI:CreateSettingsGroup(self.child, 280)
-        durPosGroup:AddWidget(GUI:CreateHeader(self.child, L["Duration Position"]), 40)
-        
-        local diDurX = durPosGroup:AddWidget(GUI:CreateSlider(self.child, L["Duration Offset X"], -20, 20, 1, db, "defensiveIconDurationX", function()
-            if DF.UpdateAllDefensiveBars then DF:UpdateAllDefensiveBars() end
-        end, function() DF:LightweightUpdateDefensiveIcons() end, true), 55)
-        diDurX.hideOn = HideDefensiveDurationOptions
-        
-        local diDurY = durPosGroup:AddWidget(GUI:CreateSlider(self.child, L["Duration Offset Y"], -20, 20, 1, db, "defensiveIconDurationY", function()
-            if DF.UpdateAllDefensiveBars then DF:UpdateAllDefensiveBars() end
-        end, function() DF:LightweightUpdateDefensiveIcons() end, true), 55)
-        diDurY.hideOn = HideDefensiveDurationOptions
-        
-        local diDurColor = durPosGroup:AddWidget(GUI:CreateColorPicker(self.child, L["Duration Color"], db, "defensiveIconDurationColor", false, function()
+
+        local diDurColor = durationGroup:AddWidget(GUI:CreateColorPicker(self.child, L["Duration Color"], db, "defensiveIconDurationColor", false, function()
             if DF.UpdateAllDefensiveBars then DF:UpdateAllDefensiveBars() end
         end, function() DF:LightweightUpdateDefensiveIconColors() end, true), 35)
         diDurColor.hideOn = HideDefensiveDurationOptions
         diDurColor.disableOn = function(d) return d.defensiveIconDurationColorByTime end
-        
-        local diDurColorByTime = durPosGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Color by Time Remaining"], db, "defensiveIconDurationColorByTime", function()
+
+        local diDurColorByTime = durationGroup:AddWidget(GUI:CreateCheckbox(self.child, L["Color by Time Remaining"], db, "defensiveIconDurationColorByTime", function()
             self:RefreshStates()
             if DF.UpdateAllDefensiveBars then DF:UpdateAllDefensiveBars() end
         end), 30)
         diDurColorByTime.hideOn = HideDefensiveDurationOptions
-        
+
+        durationGroup.hideOn = HideDefensiveIconOptions
+        Add(durationGroup, nil, 1)
+
+        -- ===== DURATION POSITION GROUP (Column 2) =====
+        local durPosGroup = GUI:CreateSettingsGroup(self.child, 280)
+        durPosGroup:AddWidget(GUI:CreateHeader(self.child, L["Duration Position"]), 40)
+
+        local diDurX = durPosGroup:AddWidget(GUI:CreateSlider(self.child, L["Duration Offset X"], -20, 20, 1, db, "defensiveIconDurationX", function()
+            if DF.UpdateAllDefensiveBars then DF:UpdateAllDefensiveBars() end
+        end, function() DF:LightweightUpdateDefensiveIcons() end, true), 55)
+        diDurX.hideOn = HideDefensiveDurationOptions
+
+        local diDurY = durPosGroup:AddWidget(GUI:CreateSlider(self.child, L["Duration Offset Y"], -20, 20, 1, db, "defensiveIconDurationY", function()
+            if DF.UpdateAllDefensiveBars then DF:UpdateAllDefensiveBars() end
+        end, function() DF:LightweightUpdateDefensiveIcons() end, true), 55)
+        diDurY.hideOn = HideDefensiveDurationOptions
+
         durPosGroup.hideOn = HideDefensiveIconOptions
         Add(durPosGroup, nil, 2)
 

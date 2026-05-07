@@ -2251,9 +2251,11 @@ function DF:LightweightUpdateDefensiveIconColors()
             icon.borderBottom:SetColorTexture(borderColor.r, borderColor.g, borderColor.b, borderColor.a or 1)
         end
         
-        -- Update duration text color
-        if icon.nativeCooldownText then
-            icon.nativeCooldownText:SetTextColor(durationColor.r, durationColor.g, durationColor.b, 1)
+        -- Update duration text color (skip when colorByTime is active — RenderDefensiveBarIcon handles it)
+        if not db.defensiveIconDurationColorByTime then
+            if icon.nativeCooldownText then
+                icon.nativeCooldownText:SetTextColor(durationColor.r, durationColor.g, durationColor.b, 1)
+            end
         end
     end
     
@@ -2907,16 +2909,9 @@ function DF:ApplySavedCVarSettings()
     end
     SetCVar("raidFramesDispelIndicatorType", dispelIndicator)
     
-    -- Apply only dispellable debuffs setting
-    local onlyDispellable = db._blizzOnlyDispellable
-    if onlyDispellable ~= nil then
-        SetCVar("raidFramesDisplayOnlyDispellableDebuffs", onlyDispellable and 1 or 0)
-    end
-    
     if DF.debugEnabled then
         print("|cff00ff00DandersFrames:|r Applied CVar settings:")
         print("  raidFramesDispelIndicatorType =", dispelIndicator)
-        print("  raidFramesDisplayOnlyDispellableDebuffs =", onlyDispellable and 1 or 0)
     end
 end
 

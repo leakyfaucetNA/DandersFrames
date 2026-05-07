@@ -747,7 +747,6 @@ DF.GlobalDefaults = {
 DF.PartyDefaults = {
     -- Internal migration flags
     _blizzDispelIndicator = 1,
-    _blizzOnlyDispellable = false,
     _defensiveBarMigrated = true,
     _defensiveIconMigrated = true,
 
@@ -2068,7 +2067,6 @@ DF.PartyDefaults = {
 DF.RaidDefaults = {
     -- Internal migration flags
     _blizzDispelIndicator = 1,
-    _blizzOnlyDispellable = false,
     _defensiveBarMigrated = true,
     _defensiveIconMigrated = true,
 

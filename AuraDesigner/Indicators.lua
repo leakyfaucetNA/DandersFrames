@@ -1044,11 +1044,14 @@ function Indicators:ApplyHealthBar(frame, config, auraData)
     local overlay = GetOrCreateTintOverlay(frame)
     if overlay then
         overlay:SetStatusBarColor(r, g, b, blend)
-        overlay:Show()
-        -- Sync fill with current health
+        -- Snap fill to current health before showing so the bar doesn't animate
+        -- from near-empty to the correct position (ExponentialEaseOut + the
+        -- min/max changing from the creation default of 0-1 to 0-maxHealth
+        -- makes the stored value of 1 render as ~0% until the smooth completes).
         if DF.UpdateADTintHealth then
-            DF:UpdateADTintHealth(frame)
+            DF:UpdateADTintHealth(frame, true)  -- true = skip smooth interpolation
         end
+        overlay:Show()
     end
 
     -- ========================================
@@ -1121,11 +1124,13 @@ end
 -- Update tint overlay fill to match current health.
 -- Called from UpdateUnitFrame and UpdateHealthFast (same pattern as
 -- DF:UpdateDispelGradientHealth and DF:UpdateMyBuffGradientHealth).
-function DF:UpdateADTintHealth(frame)
+function DF:UpdateADTintHealth(frame, skipSmooth)
     if not frame or not frame.dfAD then return end
 
     local overlay = frame.dfAD.tintOverlay
-    if not overlay or not overlay:IsShown() then return end
+    -- Allow being called before Show() (skipSmooth path from ApplyHealthBar)
+    if not overlay then return end
+    if not skipSmooth and not overlay:IsShown() then return end
 
     local unit = frame.unit
     if not unit or not UnitExists(unit) then return end
@@ -1154,7 +1159,9 @@ function DF:UpdateADTintHealth(frame)
 
     overlay:SetMinMaxValues(0, maxHealth)
 
-    local smoothEnabled = db and db.smoothBars
+    -- skipSmooth: always snap when called from ApplyHealthBar before Show()
+    -- so the bar doesn't animate from its default position to actual health.
+    local smoothEnabled = (not skipSmooth) and db and db.smoothBars
     if smoothEnabled and Enum and Enum.StatusBarInterpolation and Enum.StatusBarInterpolation.ExponentialEaseOut then
         overlay:SetValue(currentHealth, Enum.StatusBarInterpolation.ExponentialEaseOut)
     else
@@ -2802,7 +2809,7 @@ local function CreateADBar(frame, auraName)
                         end
                     end
                 end
-                self:SetStatusBarColor(barR, barG, barB, 1)
+                self:SetStatusBarColor(barR, barG, barB, self.dfAD_fillA or 1)
             end
         end
     end)
@@ -2870,6 +2877,7 @@ function Indicators:ConfigureBar(frame, config, defaults, auraName, priority)
     local fillR = fillColor and (fillColor[1] or fillColor.r) or 1
     local fillG = fillColor and (fillColor[2] or fillColor.g) or 1
     local fillB = fillColor and (fillColor[3] or fillColor.b) or 1
+    local fillA = fillColor and (fillColor[4] or fillColor.a) or 1
 
     local bgColor = config.bgColor
     if bgColor and bar.bg then
@@ -2893,6 +2901,7 @@ function Indicators:ConfigureBar(frame, config, defaults, auraName, priority)
     bar.dfAD_fillR = fillR
     bar.dfAD_fillG = fillG
     bar.dfAD_fillB = fillB
+    bar.dfAD_fillA = fillA
 
     -- Hide Icon flag (bars don't have icons but stored for consistency)
     local hideIcon = config.hideIcon; if hideIcon == nil then hideIcon = defaults and defaults.hideIcon end
@@ -3219,6 +3228,7 @@ function Indicators:UpdateBar(frame, config, auraData, defaults, auraName, prior
     local fillR = bar.dfAD_fillR or 1
     local fillG = bar.dfAD_fillG or 1
     local fillB = bar.dfAD_fillB or 1
+    local fillA = bar.dfAD_fillA or 1
 
     if bar.dfAD_colorCurve and frame.unit and auraData.auraInstanceID
        and C_UnitAuras and C_UnitAuras.GetAuraDuration then
@@ -3233,13 +3243,13 @@ function Indicators:UpdateBar(frame, config, auraData, defaults, auraName, prior
             if result and result.r then
                 bar:SetStatusBarColor(result.r, result.g, result.b)
             else
-                bar:SetStatusBarColor(fillR, fillG, fillB, 1)
+                bar:SetStatusBarColor(fillR, fillG, fillB, fillA)
             end
         else
-            bar:SetStatusBarColor(fillR, fillG, fillB, 1)
+            bar:SetStatusBarColor(fillR, fillG, fillB, fillA)
         end
     else
-        bar:SetStatusBarColor(fillR, fillG, fillB, 1)
+        bar:SetStatusBarColor(fillR, fillG, fillB, fillA)
     end
 
     -- ========================================
@@ -3416,7 +3426,11 @@ function Indicators:HideUnusedBars(frame, activeMap)
             bar.dfAD_unit = nil
             bar.dfAD_duration = 0
             bar.dfAD_expirationTime = 0
-            bar.dfAD_colorCurve = nil
+            -- dfAD_colorCurve intentionally NOT cleared — it is static config set by
+            -- ConfigureBar and reused across aura applications. Clearing it here caused
+            -- colour-by-time and expiring colour overrides to stop working after the
+            -- first cast because ConfigureBar doesn't re-run when adConfigVersion is
+            -- unchanged. dfAD_auraInstanceID = nil is sufficient to guard the OnUpdate.
             bar.dfAD_usedTimerDuration = false
             if bar.durationCooldown then
                 bar.durationCooldown:Hide()

@@ -750,6 +750,21 @@ end
 -- Called from proxy __newindex so every setting change updates the preview in real-time
 local RefreshPreviewLightweight
 
+-- Throttled live-frame refresh: bumps adConfigVersion and re-runs UpdateFrame on all
+-- visible AD-enabled frames. Debounced so rapid slider drags only trigger one refresh.
+local pendingLiveRefresh = false
+local function RefreshLiveFramesThrottled()
+    if pendingLiveRefresh then return end
+    pendingLiveRefresh = true
+    C_Timer.After(0.1, function()
+        pendingLiveRefresh = false
+        local engine = DF.AuraDesigner and DF.AuraDesigner.Engine
+        if engine and engine.ForceRefreshAllFrames then
+            engine:ForceRefreshAllFrames()
+        end
+    end)
+end
+
 -- Global-default key mapping: which global default keys apply to placed types
 local GLOBAL_DEFAULT_MAP = {
     icon   = {
@@ -825,6 +840,7 @@ local function CreateInstanceProxy(auraName, indicatorID)
             if not inst then return end
             inst[k] = v
             if RefreshPreviewLightweight then RefreshPreviewLightweight() end
+            RefreshLiveFramesThrottled()
         end,
     })
 end
@@ -856,6 +872,7 @@ local function CreateProxy(auraName, typeKey)
             local typeCfg = EnsureTypeConfig(auraName, typeKey)
             typeCfg[k] = v
             if RefreshPreviewLightweight then RefreshPreviewLightweight() end
+            RefreshLiveFramesThrottled()
         end,
     })
 end
@@ -872,6 +889,7 @@ local function CreateAuraProxy(auraName)
             local auraCfg = EnsureAuraConfig(auraName)
             auraCfg[k] = v
             if RefreshPreviewLightweight then RefreshPreviewLightweight() end
+            RefreshLiveFramesThrottled()
         end,
     })
 end
@@ -2554,8 +2572,8 @@ local function BuildTypeContent(parent, typeKey, auraName, width, optProxy, yOff
         AddWidget(copyContainer, 38)
     end
 
-    -- Color picker callback shorthand
-    local function RPL() if RefreshPreviewLightweight then RefreshPreviewLightweight() end end
+    -- Color picker callback shorthand — refreshes both the AD preview and live frames
+    local function RPL() if RefreshPreviewLightweight then RefreshPreviewLightweight() end RefreshLiveFramesThrottled() end
 
     if typeKey == "icon" then
         -- Position
