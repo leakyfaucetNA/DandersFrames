@@ -1038,12 +1038,59 @@ function Indicators:ApplyHealthBar(frame, config, auraData)
 
     local r, g, b = color[1] or color.r or 1, color[2] or color.g or 1, color[3] or color.b or 1
     local mode = string.lower(config.mode or "replace")
-    -- Both modes use the overlay — replace forces full opacity, tint uses blend slider
+    -- Replace: full opacity overlay; Tint: blend slider controls mix strength
     local blend = (mode == "replace") and 1 or (config.blend or 0.5)
+
+    -- Store on state so UpdateAuraDesignerAppearance / UpdateHealthBarAppearance
+    -- can access these for OOR handling and the replace/tint mode gate.
+    state.healthbarMode     = mode
+    state.healthbarR        = r
+    state.healthbarG        = g
+    state.healthbarB        = b
+    state.healthbarBlend    = blend
+    -- Track the currently displayed color (may differ from healthbarR/G/B when
+    -- the expiring ticker has switched the overlay to the expiring color).
+    -- UpdateAuraDesignerAppearance reads this so it doesn't reset the expiring
+    -- color back to the active color on every UNIT_AURA event.
+    state.healthbarCurrentR = r
+    state.healthbarCurrentG = g
+    state.healthbarCurrentB = b
+    -- healthbarEffectiveBlend: the alpha last written to the overlay by
+    -- UpdateAuraDesignerAppearance (blend in-range, oorAlpha OOR). Expiring
+    -- callbacks read this so they don't override the OOR fade back to full
+    -- blend between UpdateAuraDesignerAppearance calls. Not reset here so
+    -- OOR state is preserved across UNIT_AURA events; nil on first use falls
+    -- back to entry.blend in the callbacks.
 
     local overlay = GetOrCreateTintOverlay(frame)
     if overlay then
-        overlay:SetStatusBarColor(r, g, b, blend)
+        -- Re-sync texture in case the health bar's texture changed since the overlay
+        -- was first created (frame recycled to a different unit can swap textures).
+        local currentTex = healthBar:GetStatusBarTexture()
+        overlay:SetStatusBarTexture(currentTex and currentTex:GetTexture() or "Interface\\Buttons\\WHITE8x8")
+        -- Use OOR-aware blend if already established (preserves OOR fade on UNIT_AURA).
+        local initialBlend = state.healthbarEffectiveBlend or blend
+        overlay:SetStatusBarColor(r, g, b, initialBlend)
+        -- In replace mode, also colour the underlying health bar texture to match the overlay.
+        -- This prevents class-colour bleedthrough when the overlay fades OOR. In tint mode the
+        -- underlying bar colour is intentionally visible through the semi-transparent overlay,
+        -- so we restore it to the normal class/custom colour instead.
+        if mode == "replace" then
+            local hbTex = healthBar:GetStatusBarTexture()
+            if hbTex then
+                hbTex:SetVertexColor(r, g, b)
+            end
+        else
+            -- Tint mode: the underlying bar must show its normal colour through the overlay.
+            -- A previous replace-mode apply may have left a stale AD vertex colour on hbTex.
+            -- Briefly release the AD lock so UpdateHealthBarAppearance restores the normal
+            -- class/custom colour before we re-claim the bar.
+            state.healthbar = false
+            if DF.UpdateHealthBarAppearance then
+                DF:UpdateHealthBarAppearance(frame)
+            end
+            state.healthbar = true
+        end
         -- Snap fill to current health before showing so the bar doesn't animate
         -- from near-empty to the correct position (ExponentialEaseOut + the
         -- min/max changing from the creation default of 0-1 to 0-maxHealth
@@ -1078,14 +1125,35 @@ function Indicators:ApplyHealthBar(frame, config, auraData)
             thresholdMode = config.expiringThresholdMode,
             color = ec, originalColor = oc,
             applyResult = function(el, result, entry)
-                el:SetStatusBarColor(result.r, result.g, result.b, entry.blend)
+                local adState = frame.dfAD
+                -- Use OOR-aware blend if UpdateAuraDesignerAppearance has set one.
+                local effectiveBlend = (adState and adState.healthbarEffectiveBlend) or entry.blend
+                el:SetStatusBarColor(result.r, result.g, result.b, effectiveBlend)
                 local oc2 = entry.originalColor
                 local isExp = IsColorExpiring(result, oc2)
+                -- Keep current-color in sync so UpdateAuraDesignerAppearance
+                -- (OOR handler) uses the expiring color rather than the active one.
+                if adState then
+                    adState.healthbarCurrentR = result.r
+                    adState.healthbarCurrentG = result.g
+                    adState.healthbarCurrentB = result.b
+                end
                 UpdatePulseState(el, isExp)
             end,
             applyManual = function(el, isExp, entry)
                 local c = isExp and entry.color or entry.originalColor
-                el:SetStatusBarColor(c.r or 1, c.g or 1, c.b or 1, entry.blend)
+                local cr, cg, cb = c.r or 1, c.g or 1, c.b or 1
+                local adState = frame.dfAD
+                -- Use OOR-aware blend if UpdateAuraDesignerAppearance has set one.
+                local effectiveBlend = (adState and adState.healthbarEffectiveBlend) or entry.blend
+                el:SetStatusBarColor(cr, cg, cb, effectiveBlend)
+                -- Keep current-color in sync so UpdateAuraDesignerAppearance
+                -- (OOR handler) uses the expiring color rather than the active one.
+                if adState then
+                    adState.healthbarCurrentR = cr
+                    adState.healthbarCurrentG = cg
+                    adState.healthbarCurrentB = cb
+                end
                 UpdatePulseState(el, isExp)
             end,
         })
@@ -1110,7 +1178,15 @@ function Indicators:RevertHealthBar(frame)
             state.tintOverlay:SetAlpha(1)
         end
         state.tintOverlay:Hide()
+        state.tintOverlay:SetStatusBarColor(1, 1, 1, 1)
     end
+
+    -- Clear tracked color and blend so stale values don't affect the next
+    -- aura that claims this frame's health bar indicator.
+    state.healthbarCurrentR      = nil
+    state.healthbarCurrentG      = nil
+    state.healthbarCurrentB      = nil
+    state.healthbarEffectiveBlend = nil
 
     -- Refresh health bar color so the bar shows the correct color
     -- (class color, custom color, etc.) after the overlay is removed.
@@ -1401,6 +1477,9 @@ local function GetOrCreateADIcon(frame, auraName)
     -- Use the same icon creation as the rest of the addon
     local icon = DF:CreateAuraIcon(frame, 0, "BUFF")
     icon.dfAD_auraName = auraName
+    -- Set strata to the unit frame's strata so we don't inherit contentOverlay's
+    -- higher strata and show through game panels before Configure runs.
+    icon:SetFrameStrata(frame:GetFrameStrata())
 
     -- Store default settings for the aura timer system
     icon.showDuration = true
@@ -1439,8 +1518,11 @@ function Indicators:ConfigureIcon(frame, config, defaults, auraName, priority)
     local priorityBoost = math.floor((20 - (priority or 5)) / 4)  -- 0-5 range for tiebreaking
     icon:SetFrameLevel(math.max(0, baseLevel + level + priorityBoost))
 
-    -- Frame strata: per-indicator override, falls back to global default
-    local strata = config.frameStrata or (defaults and defaults.indicatorFrameStrata) or "HIGH"
+    -- Frame strata: per-indicator override, falls back to global default.
+    -- Fallback is "INHERIT" (not "HIGH") so that indicators without an explicit
+    -- saved strata (e.g. new indicators on old profiles missing indicatorFrameStrata)
+    -- correctly inherit the unit frame's strata (MEDIUM) rather than jumping to HIGH.
+    local strata = config.frameStrata or (defaults and defaults.indicatorFrameStrata) or "INHERIT"
     if strata ~= "INHERIT" then
         SafeSetFrameStrata(icon, frame, strata)
     else
@@ -1853,7 +1935,27 @@ function Indicators:UpdateIcon(frame, config, auraData, defaults, auraName, prio
                         icon.nativeCooldownText:SetTextColor(r, g, b, 1)
                     end
                 end
+                -- Register for ongoing per-tick gradient updates (API path only).
+                -- Without this, SetTextColor above would only fire on aura events
+                -- and the gradient would freeze between events. The shared ticker
+                -- auto-cleans up when the text is hidden.
+                if usedAPI and DF.durationColorCurve then
+                    RegisterExpiring(icon.nativeCooldownText, {
+                        unit = frame.unit,
+                        auraInstanceID = auraData.auraInstanceID,
+                        duration = auraData.duration,
+                        colorCurve = DF.durationColorCurve,
+                        applyResult = function(el, result)
+                            if result and result.r then
+                                el:SetTextColor(result.r, result.g, result.b, 1)
+                            end
+                        end,
+                    })
+                else
+                    UnregisterExpiring(icon.nativeCooldownText)
+                end
             else
+                UnregisterExpiring(icon.nativeCooldownText)
                 local durationColor = config.durationColor or (defaults and defaults.durationColor)
                 if durationColor then
                     icon.nativeCooldownText:SetTextColor(durationColor.r or 1, durationColor.g or 1, durationColor.b or 1, 1)
@@ -2006,6 +2108,9 @@ local function CreateADSquare(frame, auraName)
     local sq = CreateFrame("Frame", nil, frame.contentOverlay or frame)
     sq:SetSize(8, 8)
     sq:SetFrameLevel((frame.contentOverlay or frame):GetFrameLevel() + 10)
+    -- Set strata to the unit frame's strata so we don't inherit contentOverlay's
+    -- higher strata and show through game panels before Configure runs.
+    sq:SetFrameStrata(frame:GetFrameStrata())
     sq.dfAD_auraName = auraName
 
     sq.border = sq:CreateTexture(nil, "BACKGROUND")
@@ -2074,8 +2179,9 @@ function Indicators:ConfigureSquare(frame, config, defaults, auraName, priority)
     local priorityBoost = math.floor((20 - (priority or 5)) / 4)  -- 0-5 range for tiebreaking
     sq:SetFrameLevel(math.max(0, baseLevel + level + priorityBoost))
 
-    -- Frame strata: per-indicator override, falls back to global default
-    local strata = config.frameStrata or (defaults and defaults.indicatorFrameStrata) or "HIGH"
+    -- Frame strata: per-indicator override, falls back to global default.
+    -- Fallback is "INHERIT" (not "HIGH") — see ConfigureIcon comment.
+    local strata = config.frameStrata or (defaults and defaults.indicatorFrameStrata) or "INHERIT"
     if strata ~= "INHERIT" then
         SafeSetFrameStrata(sq, frame, strata)
     else
@@ -2477,7 +2583,24 @@ function Indicators:UpdateSquare(frame, config, auraData, defaults, auraName, pr
                         sq.nativeCooldownText:SetTextColor(r, g, b, 1)
                     end
                 end
+                -- Register for ongoing per-tick gradient updates (API path only).
+                if usedAPI and DF.durationColorCurve then
+                    RegisterExpiring(sq.nativeCooldownText, {
+                        unit = frame.unit,
+                        auraInstanceID = auraData.auraInstanceID,
+                        duration = auraData.duration,
+                        colorCurve = DF.durationColorCurve,
+                        applyResult = function(el, result)
+                            if result and result.r then
+                                el:SetTextColor(result.r, result.g, result.b, 1)
+                            end
+                        end,
+                    })
+                else
+                    UnregisterExpiring(sq.nativeCooldownText)
+                end
             else
+                UnregisterExpiring(sq.nativeCooldownText)
                 local durationColor = config.durationColor or (defaults and defaults.durationColor)
                 if durationColor then
                     sq.nativeCooldownText:SetTextColor(durationColor.r or 1, durationColor.g or 1, durationColor.b or 1, 1)
@@ -2635,6 +2758,9 @@ local function CreateADBar(frame, auraName)
     bar:SetStatusBarTexture(DEFAULT_BAR_TEXTURE)
     bar:SetMinMaxValues(0, 1)
     bar:SetFrameLevel((frame.contentOverlay or frame):GetFrameLevel() + 10)
+    -- Set strata to the unit frame's strata so we don't inherit contentOverlay's
+    -- higher strata and show through game panels before Configure runs.
+    bar:SetFrameStrata(frame:GetFrameStrata())
     bar.dfAD_auraName = auraName
 
     -- Background texture
@@ -3026,8 +3152,9 @@ function Indicators:ConfigureBar(frame, config, defaults, auraName, priority)
     local priorityBoost = math.floor((20 - (priority or 5)) / 4)  -- 0-5 range for tiebreaking
     bar:SetFrameLevel(math.max(0, baseLevel + level + priorityBoost))
 
-    -- Frame strata: per-indicator override, falls back to global default
-    local strata = config.frameStrata or (defaults and defaults.indicatorFrameStrata) or "HIGH"
+    -- Frame strata: per-indicator override, falls back to global default.
+    -- Fallback is "INHERIT" (not "HIGH") — see ConfigureIcon comment.
+    local strata = config.frameStrata or (defaults and defaults.indicatorFrameStrata) or "INHERIT"
     if strata ~= "INHERIT" then
         SafeSetFrameStrata(bar, frame, strata)
     else
@@ -3319,6 +3446,7 @@ function Indicators:UpdateBar(frame, config, auraData, defaults, auraName, prior
                 end
 
                 if not durationColorByTime then
+                    UnregisterExpiring(bar.nativeCooldownText)
                     bar.nativeCooldownText:SetTextColor(1, 1, 1, 1)
                 elseif durationObj and durationObj.EvaluateRemainingPercent then
                     if not DF.durationColorCurve then
@@ -3333,6 +3461,23 @@ function Indicators:UpdateBar(frame, config, auraData, defaults, auraName, prior
                     if result and result.r then
                         bar.nativeCooldownText:SetTextColor(result.r, result.g, result.b, 1)
                     end
+                    -- Register for ongoing per-tick gradient updates so the colour
+                    -- transitions live as the buff ticks down, not just on aura events.
+                    if frame.unit and auraData and auraData.auraInstanceID then
+                        RegisterExpiring(bar.nativeCooldownText, {
+                            unit = frame.unit,
+                            auraInstanceID = auraData.auraInstanceID,
+                            duration = auraData.duration,
+                            colorCurve = DF.durationColorCurve,
+                            applyResult = function(el, result)
+                                if result and result.r then
+                                    el:SetTextColor(result.r, result.g, result.b, 1)
+                                end
+                            end,
+                        })
+                    end
+                else
+                    UnregisterExpiring(bar.nativeCooldownText)
                 end
 
                 -- Register wrapper for ongoing hide-above alpha updates

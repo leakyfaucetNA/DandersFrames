@@ -1,5 +1,51 @@
 # DandersFrames Changelog
 
+## [4.3.9]
+
+### Bug Fixes
+
+* (Aura Designer) Fix health bar colour flashing between active and expiring colours when an aura is past its expiring threshold, and the flash persisting while out of range. (PR #74 by Krathe)
+
+## [4.3.8] - 2026-05-12
+
+### New Features
+
+* **Reset Page button** — every settings page that has a Sync/Copy button now also has a red **Reset Page** button to the left of them. Clicking it resets only that page's settings on the current mode (Party or Raid) back to their built-in defaults, with a confirmation popup. Aura Designer and Click Casting have their own reset systems and are not part of this.
+* **Sync / Copy / Reset trio added to Visibility, Group Labels, Pinned Frames, Integrations, and Global Fonts pages** — these pages were previously missing the Sync-with-Raid/Party and Copy-to-Raid/Party buttons; they now match the rest of the addon's settings pages.
+* **Reset Page button added to the Aura Blacklist page** — clicking it clears all of your custom blacklist toggles, with a confirmation popup. Sync/Copy doesn't apply here since the blacklist is shared across both modes.
+
+### Improvements
+
+* Reset, Copy, and Sync confirmation popups now use the addon's themed popup style.
+* (In-game Changelog) Renamed the "Back" button on the changelog overlay to "Close" for clarity. (PR #58 by Krathe)
+* Removed the ElvUI compatibility popup. DandersFrames no longer relies on Blizzard's party/raid frames, so ElvUI disabling them is harmless.
+* Info and warning banners across all settings pages now have consistent styling with tone-coloured icons (info, warning, caution). (PR #57 by Krathe)
+* (Aura Designer) Reworked sound indicator: Missing Trigger and Expire Alert can now be toggled independently, with separate loop intervals and a new Play Once option. (PR #54 by Krathe)
+* (Aura Designer) Tint mode for health bar indicators now updates live when switching from replace mode, without needing to toggle the aura. (PR #62 by Krathe)
+
+### Bug Fixes
+
+* (Arena/Solo Shuffle) Fix teammate frames not updating between rounds when FrameSort is active. (PR #50 by Krathe)
+* (Arena/Solo Shuffle) Fix frame ordering changing between Solo Shuffle rounds when FrameSort is active. (PR #73 by Krathe)
+* (Aura Designer) Fix new indicators briefly appearing above the minimap until the strata setting was toggled. (PR #51 by Krathe)
+* (Pinned Frames) Fix auras not showing on pinned frames when the unit isn't on your main party or raid frames. (PR #52 by Krathe)
+* (Aura Designer) Fix indicators not firing on the first aura application after joining a group or entering a new zone. (PR #53 by Krathe)
+* (Aura Designer) Fix sound expire alert not re-triggering after a buff is refreshed and decays again. (PR #54 by Krathe)
+* (Targeted List) Fix self-target colour overlay covering the text, sticking on the wrong bar, and snapping off instead of fading. (PR #55 by Krathe)
+* (Aura Filters) Info banner text now wraps correctly at narrow window widths instead of overflowing the banner. (PR #57 by Krathe)
+* (Aura Designer) Fix health bar tint indicator showing the wrong colour on newly-joined party members out of combat. (PR #62 by Krathe)
+* (Aura Designer) Fix health bar tint indicators not fading when out of range with element-specific OOR enabled. (PR #60 by Krathe)
+* (Dispel Overlay) Fix absorb shields being hidden behind the dispel gradient on live frames. (PR #65 by Krathe)
+* (Dispel Overlay) Fix overlay leaking onto live frames after adjusting settings while in test mode. (PR #66 by Krathe)
+* (Dispel Overlay) Fix the gradient opacity and intensity sliders not previewing live on group frames. (PR #65 by Krathe)
+* (Personal Targeted Spells) Fix the move-mode highlight box not aligning with where icons actually appear. The saved position is now the visual centre of the icon block, with a one-time migration to preserve existing placements. (PR #69 by Krathe)
+* (Aura Blacklist) Fix wrong icon shown next to Skyfury in the Shaman buff blacklist. (PR #70 by Krathe)
+* (Pet Frames) Fix grouped pet container misalignment when anchored to the right of the party. Users with custom Offset X on the right anchor may need to retune the slider — positive now means "more gap", matching the left anchor. (PR #71 by Krathe)
+* (Pet Frames) Fix Lua error spam from pet name updates in delves and other instanced content. (PR #72 by Krathe)
+* (Aura Designer) Fix Global Defaults changes not applying to live frames without a /reload.
+* (Aura Designer) Fix the Reset All Aura Configs button not clearing indicators from live frames until /reload.
+* (Aura Designer) Fix Color Duration by Time not transitioning live as a buff ticks down on icon, square, and bar indicators.
+
 ## [4.3.7] - 2026-05-07
 
 ### Bug Fixes
