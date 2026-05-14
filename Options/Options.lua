@@ -2379,6 +2379,121 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             return container
         end
         
+        -- Forward declarations referenced by CreateClassFilterRow below
+        -- (real definitions live further down in this scope).
+        local rosterWidget
+        local unitSelHeader
+        local SyncPlayersOverride
+
+        -- Class lists for the auto-populate class filter (per role)
+        local TANK_CLASSES   = { "DEATHKNIGHT", "DEMONHUNTER", "DRUID", "MONK", "PALADIN", "WARRIOR" }
+        local HEALER_CLASSES = { "DRUID", "EVOKER", "MONK", "PALADIN", "PRIEST", "SHAMAN" }
+        local DPS_CLASSES    = {
+            "DEATHKNIGHT", "DEMONHUNTER", "DRUID", "EVOKER", "HUNTER", "MAGE",
+            "MONK", "PALADIN", "PRIEST", "ROGUE", "SHAMAN", "WARLOCK", "WARRIOR",
+        }
+
+        -- Class filter row: a grid of class checkboxes bound to
+        -- GetCurrentSet()[tableKey][CLASSTOKEN]. Empty filter table is
+        -- treated as "all classes match" (preserves backward-compatible
+        -- default), so all checkboxes appear checked when the table is
+        -- empty. The first uncheck populates the table with all classes
+        -- except the toggled one, switching to positive-list semantics.
+        local function CreateClassFilterRow(parent, classList, tableKey)
+            local cols = 3
+            local rowHeight = 22
+            local rows = math.ceil(#classList / cols)
+            local container = CreateFrame("Frame", nil, parent)
+            container:SetSize(280, rows * rowHeight)
+            container.classRefreshes = {}
+
+            local function notifyChange()
+                local set = GetCurrentSet()
+                if DF.PinnedFrames then
+                    DF.PinnedFrames:AutoPopulateSet(set)
+                    DF.PinnedFrames:UpdateHeaderNameList(activeHighlightTab)
+                    if rosterWidget then rosterWidget:Refresh() end
+                    SyncPlayersOverride()
+                end
+                DF:UpdateAll()
+            end
+
+            for idx, classToken in ipairs(classList) do
+                local className = (LOCALIZED_CLASS_NAMES_MALE and LOCALIZED_CLASS_NAMES_MALE[classToken]) or classToken
+
+                local cb = CreateFrame("CheckButton", nil, container, "BackdropTemplate")
+                cb:SetSize(14, 14)
+                cb:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+                cb:SetBackdropColor(0.1, 0.1, 0.1, 0.8)
+                cb:SetBackdropBorderColor(0.25, 0.25, 0.25, 1)
+                cb.Check = cb:CreateTexture(nil, "OVERLAY")
+                cb.Check:SetTexture("Interface\\Buttons\\WHITE8x8")
+                local tc = GUI.GetThemeColor()
+                cb.Check:SetVertexColor(tc.r, tc.g, tc.b)
+                cb.Check:SetPoint("CENTER")
+                cb.Check:SetSize(8, 8)
+                cb:SetCheckedTexture(cb.Check)
+
+                local txt = container:CreateFontString(nil, "OVERLAY", "DFFontHighlightSmall")
+                txt:SetPoint("LEFT", cb, "RIGHT", 4, 0)
+                txt:SetText(className)
+                local cc = (RAID_CLASS_COLORS and RAID_CLASS_COLORS[classToken])
+                if cc then
+                    txt:SetTextColor(cc.r, cc.g, cc.b)
+                else
+                    txt:SetTextColor(0.85, 0.85, 0.85)
+                end
+
+                local col = (idx - 1) % cols
+                local row = math.floor((idx - 1) / cols)
+                cb:ClearAllPoints()
+                cb:SetPoint("TOPLEFT", container, "TOPLEFT", 18 + col * 90, -row * rowHeight - 2)
+
+                cb:SetScript("OnClick", function(s)
+                    local set = GetCurrentSet()
+                    if not set[tableKey] then set[tableKey] = {} end
+                    local filter = set[tableKey]
+                    local checked = s:GetChecked()
+
+                    if not next(filter) then
+                        -- Empty filter = "all match". User unchecking transitions
+                        -- to positive-list mode with all classes EXCEPT this one.
+                        if not checked then
+                            for _, c in ipairs(classList) do
+                                if c ~= classToken then filter[c] = true end
+                            end
+                        end
+                        -- Checking while empty leaves it empty (still "all match").
+                    else
+                        if checked then
+                            filter[classToken] = true
+                        else
+                            filter[classToken] = nil
+                        end
+                    end
+                    notifyChange()
+                end)
+
+                local refresh = function()
+                    local set = GetCurrentSet()
+                    local filter = set[tableKey]
+                    if not filter or not next(filter) then
+                        cb:SetChecked(true)  -- empty = all match → visually checked
+                    else
+                        cb:SetChecked(filter[classToken] == true)
+                    end
+                end
+                table.insert(container.classRefreshes, refresh)
+            end
+
+            container.Refresh = function()
+                for _, r in ipairs(container.classRefreshes) do r() end
+            end
+            container.Refresh()
+            table.insert(controlsToRefresh, container)
+            return container, rows * rowHeight
+        end
+
         -- Helper function to create refreshable slider
         local function CreateRefreshableSlider(parent, label, minVal, maxVal, step, dbKey, callback)
             local container = CreateFrame("Frame", nil, parent)
@@ -2595,12 +2710,10 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
             end
         end
         
-        -- Forward declaration for roster widget and unit selection header
-        local rosterWidget
-        local unitSelHeader
-        
         -- Helper: sync players array to override system after auto-populate
-        local function SyncPlayersOverride()
+        -- (rosterWidget / unitSelHeader / SyncPlayersOverride are forward-declared
+        -- earlier in this scope so CreateClassFilterRow can reference them.)
+        SyncPlayersOverride = function()
             if DF.AutoProfilesUI and DF.AutoProfilesUI:IsEditing() then
                 local players = GetCurrentSet().players
                 local copy = {}
@@ -2810,6 +2923,7 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
         autoPopGroup:AddWidget(GUI:CreateLabel(self.child, L["Automatically add players by role when they join your group."], 250), 30)
 
         autoPopGroup:AddWidget(CreateRefreshableCheckbox(self.child, L["Auto-add Tanks"], "autoAddTanks", function()
+            self:RefreshStates()  -- toggles class-row visibility
             if GetCurrentSet().autoAddTanks and DF.PinnedFrames then
                 DF.PinnedFrames:AutoPopulateSet(GetCurrentSet())
                 DF.PinnedFrames:UpdateHeaderNameList(activeHighlightTab)
@@ -2817,7 +2931,12 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                 SyncPlayersOverride()
             end
         end), 28)
+        local tankClassRow, tankClassRowH = CreateClassFilterRow(self.child, TANK_CLASSES, "autoAddTankClasses")
+        autoPopGroup:AddWidget(tankClassRow, tankClassRowH)
+        tankClassRow.hideOn = function() return not GetCurrentSet().autoAddTanks end
+
         autoPopGroup:AddWidget(CreateRefreshableCheckbox(self.child, L["Auto-add Healers"], "autoAddHealers", function()
+            self:RefreshStates()
             if GetCurrentSet().autoAddHealers and DF.PinnedFrames then
                 DF.PinnedFrames:AutoPopulateSet(GetCurrentSet())
                 DF.PinnedFrames:UpdateHeaderNameList(activeHighlightTab)
@@ -2825,8 +2944,25 @@ function DF:SetupGUIPages(GUI, CreateCategory, CreateSubTab, BuildPage)
                 SyncPlayersOverride()
             end
         end), 28)
+        local healerClassRow, healerClassRowH = CreateClassFilterRow(self.child, HEALER_CLASSES, "autoAddHealerClasses")
+        autoPopGroup:AddWidget(healerClassRow, healerClassRowH)
+        healerClassRow.hideOn = function() return not GetCurrentSet().autoAddHealers end
+
         autoPopGroup:AddWidget(CreateRefreshableCheckbox(self.child, L["Auto-add DPS"], "autoAddDPS", function()
+            self:RefreshStates()
             if GetCurrentSet().autoAddDPS and DF.PinnedFrames then
+                DF.PinnedFrames:AutoPopulateSet(GetCurrentSet())
+                DF.PinnedFrames:UpdateHeaderNameList(activeHighlightTab)
+                if rosterWidget then rosterWidget:Refresh() end
+                SyncPlayersOverride()
+            end
+        end), 28)
+        local dpsClassRow, dpsClassRowH = CreateClassFilterRow(self.child, DPS_CLASSES, "autoAddDPSClasses")
+        autoPopGroup:AddWidget(dpsClassRow, dpsClassRowH)
+        dpsClassRow.hideOn = function() return not GetCurrentSet().autoAddDPS end
+
+        autoPopGroup:AddWidget(CreateRefreshableCheckbox(self.child, L["Exclude Self"], "excludeSelf", function()
+            if DF.PinnedFrames then
                 DF.PinnedFrames:AutoPopulateSet(GetCurrentSet())
                 DF.PinnedFrames:UpdateHeaderNameList(activeHighlightTab)
                 if rosterWidget then rosterWidget:Refresh() end

@@ -34,3 +34,4 @@ update.sh
 
 # WoW CDN cache (TPR client data)
 cache/
+leaky.md

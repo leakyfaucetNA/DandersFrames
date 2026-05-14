@@ -163,8 +163,28 @@ function PinnedFrames:AutoPopulateSet(set, roster)
 
     -- Ensure manualPlayers table exists (migration for existing profiles)
     if not set.manualPlayers then set.manualPlayers = {} end
+    -- Migrate class-filter tables (added later than the role flags)
+    if not set.autoAddTankClasses   then set.autoAddTankClasses   = {} end
+    if not set.autoAddHealerClasses then set.autoAddHealerClasses = {} end
+    if not set.autoAddDPSClasses    then set.autoAddDPSClasses    = {} end
 
     local hasAnyAutoFilter = set.autoAddTanks or set.autoAddHealers or set.autoAddDPS
+
+    -- Player's name (for the excludeSelf filter). Captured once.
+    local selfFullName = GetUnitName("player", true)
+    local selfShortName = selfFullName and (selfFullName:match("([^%-]+)") or selfFullName)
+
+    -- Returns true if the given class token passes the role's class filter.
+    -- An empty filter table means "all classes accepted" (backward compatible).
+    local function classAllowed(role, classToken)
+        local filter
+        if role == "TANK" then filter = set.autoAddTankClasses
+        elseif role == "HEALER" then filter = set.autoAddHealerClasses
+        elseif role == "DAMAGER" then filter = set.autoAddDPSClasses
+        end
+        if not filter or not next(filter) then return true end
+        return classToken and filter[classToken] == true
+    end
 
     -- Build lookup of current players in set
     local existingPlayers = {}
@@ -179,9 +199,12 @@ function PinnedFrames:AutoPopulateSet(set, roster)
         -- Solo mode: player role is always DAMAGER (no group role assignment)
         local fullName = GetUnitName("player", true)
         local shortName = fullName and fullName:match("([^%-]+)") or fullName
+        local _, classToken = UnitClass("player")
 
-        -- Auto-add player if DPS filter is on
-        if set.autoAddDPS and shortName and not existingPlayers[shortName] then
+        -- Auto-add player if DPS filter is on, not excluded, and class passes
+        if set.autoAddDPS and shortName and not existingPlayers[shortName]
+            and not set.excludeSelf
+            and classAllowed("DAMAGER", classToken) then
             table.insert(set.players, fullName)
             changed = true
         end
@@ -191,10 +214,11 @@ function PinnedFrames:AutoPopulateSet(set, roster)
             for i = #set.players, 1, -1 do
                 local playerName = set.players[i]
                 if not set.manualPlayers[playerName] then
-                    -- Solo player is always DAMAGER
                     local pShort = playerName:match("([^%-]+)") or playerName
                     if pShort == shortName then
-                        if not set.autoAddDPS then
+                        -- excludeSelf, role disabled, or class no longer allowed → remove
+                        if set.excludeSelf or not set.autoAddDPS
+                            or not classAllowed("DAMAGER", classToken) then
                             table.remove(set.players, i)
                             changed = true
                         end
@@ -209,8 +233,9 @@ function PinnedFrames:AutoPopulateSet(set, roster)
         return changed
     end
 
-    -- Build name → role map for the removal pass
-    local rosterRoles = {}  -- shortName -> role
+    -- Build name → (role, class) map for the removal pass
+    local rosterRoles = {}    -- shortName/fullName -> role
+    local rosterClasses = {}  -- shortName/fullName -> class token
     local isRaid = IsInRaid()
     for i = 1, numMembers do
         local unit = isRaid and ("raid" .. i) or (i == 1 and "player" or "party" .. (i - 1))
@@ -220,18 +245,24 @@ function PinnedFrames:AutoPopulateSet(set, roster)
             local shortName = fullName:match("([^%-]+)") or fullName
             local role = UnitGroupRolesAssigned(unit)
             if role == "NONE" then role = "DAMAGER" end
+            local _, classToken = UnitClass(unit)
             rosterRoles[shortName] = role
             rosterRoles[fullName] = role
+            rosterClasses[shortName] = classToken
+            rosterClasses[fullName] = classToken
 
-            -- Auto-add pass: add players matching enabled role filters
-            if not existingPlayers[shortName] then
+            -- Auto-add pass: add players matching enabled role filters,
+            -- not the player themselves (when excludeSelf is on), and
+            -- whose class passes the role's class filter.
+            local isSelf = (selfShortName and shortName == selfShortName)
+            if not existingPlayers[shortName] and not (isSelf and set.excludeSelf) then
                 local shouldAdd = false
                 if set.autoAddTanks and role == "TANK" then
-                    shouldAdd = true
+                    shouldAdd = classAllowed("TANK", classToken)
                 elseif set.autoAddHealers and role == "HEALER" then
-                    shouldAdd = true
+                    shouldAdd = classAllowed("HEALER", classToken)
                 elseif set.autoAddDPS and role == "DAMAGER" then
-                    shouldAdd = true
+                    shouldAdd = classAllowed("DAMAGER", classToken)
                 end
 
                 if shouldAdd then
@@ -243,8 +274,9 @@ function PinnedFrames:AutoPopulateSet(set, roster)
         end
     end
 
-    -- Auto-remove pass: remove players whose role no longer matches any filter
-    -- Only runs when at least one auto-add filter is active
+    -- Auto-remove pass: remove players whose role/class no longer matches any
+    -- filter, or whose excludeSelf condition now applies. Only runs when
+    -- at least one auto-add filter is active.
     if hasAnyAutoFilter then
         for i = #set.players, 1, -1 do
             local playerName = set.players[i]
@@ -253,22 +285,32 @@ function PinnedFrames:AutoPopulateSet(set, roster)
             if set.manualPlayers[playerName] then
                 -- skip
             else
-                -- Only evaluate players still in the group
-                -- (offline/left players are handled by CleanOfflinePlayers)
-                local role = rosterRoles[playerName]
-                if role then
-                    local matchesFilter = false
-                    if set.autoAddTanks and role == "TANK" then
-                        matchesFilter = true
-                    elseif set.autoAddHealers and role == "HEALER" then
-                        matchesFilter = true
-                    elseif set.autoAddDPS and role == "DAMAGER" then
-                        matchesFilter = true
-                    end
+                local pShort = playerName:match("([^%-]+)") or playerName
+                local isSelf = (selfShortName and pShort == selfShortName)
 
-                    if not matchesFilter then
-                        table.remove(set.players, i)
-                        changed = true
+                if isSelf and set.excludeSelf then
+                    -- excludeSelf turned on → drop self
+                    table.remove(set.players, i)
+                    changed = true
+                else
+                    -- Only evaluate players still in the group
+                    -- (offline/left players are handled by CleanOfflinePlayers)
+                    local role = rosterRoles[playerName]
+                    local classToken = rosterClasses[playerName]
+                    if role then
+                        local matchesFilter = false
+                        if set.autoAddTanks and role == "TANK" then
+                            matchesFilter = classAllowed("TANK", classToken)
+                        elseif set.autoAddHealers and role == "HEALER" then
+                            matchesFilter = classAllowed("HEALER", classToken)
+                        elseif set.autoAddDPS and role == "DAMAGER" then
+                            matchesFilter = classAllowed("DAMAGER", classToken)
+                        end
+
+                        if not matchesFilter then
+                            table.remove(set.players, i)
+                            changed = true
+                        end
                     end
                 end
             end

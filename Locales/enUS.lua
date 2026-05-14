@@ -646,6 +646,7 @@ L["Enter any spell ID for range checking. Press Enter to apply. Leave empty to u
 L["Enter WoW texture paths (file extensions are stripped automatically). Leave empty to use DF Icons as fallback."] = true
 L["Errors Only"] = true
 L["Evoker"] = true
+L["Exclude Self"] = true
 L["Exit Editing"] = true
 L["Expiring Indicator"] = true
 L["Expiring Threshold (%)"] = true
